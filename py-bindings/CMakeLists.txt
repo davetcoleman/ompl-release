@@ -5,7 +5,7 @@ if (OMPL_BUILD_PYBINDINGS)
 
     include(PythonBindingsUtils)
 
-    set(OMPL_MODULES base control geometric util)
+    set(OMPL_MODULES base control geometric tools util)
 
     if(PY_OMPL_GENERATE)
         # need to run cmake to regenerate ompl/bindings_generator.py if
@@ -21,6 +21,7 @@ if (OMPL_BUILD_PYBINDINGS)
         add_dependencies(update_geometric_bindings update_base_bindings)
         add_dependencies(update_control_bindings update_geometric_bindings)
         add_dependencies(update_control_bindings update_base_bindings)
+        add_dependencies(update_tools_bindings update_control_bindings)
 
     endif(PY_OMPL_GENERATE)
 
@@ -34,3 +35,8 @@ if (OMPL_BUILD_PYBINDINGS)
     endif()
 
 endif(OMPL_BUILD_PYBINDINGS)
+
+add_custom_target(clean_bindings
+    ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_SOURCE_DIR}/bindings
+    COMMAND ${CMAKE_COMMAND} -E remove -f pyplusplus_{base,control,geometric,tools,util}.{cache,log}
+    WORKING_DIRECTORY ${PROJECT_BINARY_DIR})

@@ -53,11 +53,21 @@ ompl::geometric::PathGeometric::PathGeometric(const base::SpaceInformationPtr &s
     states[0] = si_->cloneState(state);
 }
 
+ompl::geometric::PathGeometric::PathGeometric(const base::SpaceInformationPtr &si, const base::State *state1, const base::State *state2) : base::Path(si)
+{
+    states.resize(2);
+    states[0] = si_->cloneState(state1);
+    states[1] = si_->cloneState(state2);
+}
+
 ompl::geometric::PathGeometric& ompl::geometric::PathGeometric::operator=(const PathGeometric &other)
 {
-    freeMemory();
-    si_ = other.si_;
-    copyFrom(other);
+    if (this != &other)
+    {
+        freeMemory();
+        si_ = other.si_;
+        copyFrom(other);
+    }
     return *this;
 }
 
@@ -102,12 +112,25 @@ double ompl::geometric::PathGeometric::smoothness(void) const
         double a = si_->distance(states[0], states[1]);
         for (unsigned int i = 2 ; i < states.size() ; ++i)
         {
+            // view the path as a sequence of segments, and look at the triangles it forms:
+            //          s1
+            //          /\          s4
+            //      a  /  \ b       |
+            //        /    \        |
+            //       /......\_______|
+            //     s0    c   s2     s3
+            //
+            // use Pythagoras generalized theorem to find the cos of the angle between segments a and b
             double b = si_->distance(states[i-1], states[i]);
             double c = si_->distance(states[i-2], states[i]);
             double acosValue = (a*a + b*b - c*c) / (2.0*a*b);
+
             if (acosValue > -1.0 && acosValue < 1.0)
             {
+                // the smoothness is actually the outside angle of the one we compute
                 double angle = (boost::math::constants::pi<double>() - acos(acosValue));
+
+                // and we normalize by the length of the segments
                 double k = 2.0 * angle / (a + b);
                 s += k * k;
             }
@@ -392,4 +415,169 @@ void ompl::geometric::PathGeometric::append(const PathGeometric &path)
     }
     else
         overlay(path, states.size());
+}
+
+void ompl::geometric::PathGeometric::keepAfter(const base::State *state)
+{
+    int index = getClosestIndex(state);
+    if (index > 0)
+    {
+        if ((std::size_t)(index + 1) < states.size())
+        {
+            double b = si_->distance(state, states[index-1]);
+            double a = si_->distance(state, states[index+1]);
+            if (b > a)
+                ++index;
+        }
+        for (int i = 0 ; i < index ; ++i)
+            si_->freeState(states[i]);
+        states.erase(states.begin(), states.begin() + index);
+    }
+}
+
+void ompl::geometric::PathGeometric::keepBefore(const base::State *state)
+{
+    int index = getClosestIndex(state);
+    if (index >= 0)
+    {
+        if (index > 0 && (std::size_t)(index + 1) < states.size())
+        {
+            double b = si_->distance(state, states[index-1]);
+            double a = si_->distance(state, states[index+1]);
+            if (b < a)
+                --index;
+        }
+        if ((std::size_t)(index + 1) < states.size())
+        {
+            for (std::size_t i = index + 1 ; i < states.size() ; ++i)
+                si_->freeState(states[i]);
+            states.resize(index + 1);
+        }
+    }
+}
+
+int ompl::geometric::PathGeometric::getClosestIndex(const base::State *state) const
+{
+    if (states.empty())
+        return -1;
+
+    int index = 0;
+    double min_d = si_->distance(states[0], state);
+    for (std::size_t i = 1 ; i < states.size() ; ++i)
+    {
+        double d = si_->distance(states[i], state);
+        if (d < min_d)
+        {
+            min_d = d;
+            index = i;
+        }
+    }
+    return index;
+}
+
+namespace ompl
+{
+    namespace magic
+    {
+        /// The factor by which to decrease velocity in the iterative search for time stamps along a ompl::geometric::PathGeometric
+        static const double TIME_PARAMETRIZATION_VELOCITY_DECREASE_FACTOR = 0.95;
+    }
+}
+
+
+void ompl::geometric::PathGeometric::computeFastTimeParametrization(double maxVel, double maxAcc, std::vector<double> &times, unsigned int maxSteps) const
+{
+    //  This implementation greatly benefited from discussions with Kenneth Anderson (http://sites.google.com/site/kennethaanderson/
+
+    if (states.empty())
+    {
+        times.clear();
+        return;
+    }
+    if (states.size() == 1)
+    {
+        times.resize(1);
+        times[0] = 0.0;
+        return;
+    }
+    if (states.size() == 2)
+    {
+        double d = si_->distance(states[0], states[1]);
+        times.resize(2);
+        times[0] = 0.0;
+        times[1] = std::max(2.0 * d / maxVel, sqrt(2.0 * d / maxAcc));
+        return;
+    }
+    
+    // compute the lengths of the segments along the path
+    std::vector<double> L(states.size() - 1);
+    for (std::size_t i = 0 ; i < L.size() ; ++i)
+        L[i] = si_->distance(states[i], states[i + 1]);
+    
+    // the time for the first state is 0
+    times.resize(states.size());
+    times[0] = 0.0;
+
+    // the velocity is maximum everywhere, except at endpoints
+    std::vector<double> vel(states.size(), maxVel);
+    vel.front() = vel.back() = 0.0;
+    
+    // compute the cosine of the angle between consecutive segments
+    // and scale the maximum desired velocity by that value
+    // this has the effect of stopping at very sharp turns
+    // and ignoring straight lines
+    for (std::size_t i = 1 ; i < L.size() ; ++i)
+    {
+        double a = L[i-1];
+        double b = L[i];
+        double c = si_->distance(states[i-1], states[i+1]);
+        double acosValue = (a*a + b*b - c*c) / (2.0*a*b);
+        vel[i] *= std::min(1.0, fabs(acosValue));
+    }
+    
+    bool change = true;
+    unsigned int steps = 0;
+    while (change && steps <= maxSteps)
+    {
+        ++steps;
+        change = false;
+
+        // compute the time points for every state, using the currently considered velocity
+        for (std::size_t i = 1 ; i < times.size() ; ++i)
+            times[i] = times[i - 1] + (2.0 * L[i-1]) / (vel[i-1] + vel[i]);
+        
+        for (std::size_t i = 0 ; i < L.size() ; ++i)
+        {
+            double acc = (vel[i + 1] - vel[i]) / (times[i + 1] - times[i]);
+            if (acc > maxAcc)
+            {
+                vel[i + 1] *= magic::TIME_PARAMETRIZATION_VELOCITY_DECREASE_FACTOR;
+                change = true;
+            }
+            else
+                if (acc < -maxAcc)
+                {
+                    vel[i] *= magic::TIME_PARAMETRIZATION_VELOCITY_DECREASE_FACTOR;
+                    change = true;
+                }
+        }
+
+        if (change)
+            for (int i = L.size() - 1 ; i >= 0 ; --i)
+            {
+                double acc = (vel[i + 1] - vel[i]) / (times[i + 1] - times[i]);
+                if (acc > maxAcc)
+                {
+                    vel[i + 1] *= magic::TIME_PARAMETRIZATION_VELOCITY_DECREASE_FACTOR;
+                    change = true;
+                }
+                else
+                    if (acc < -maxAcc)
+                    {
+                        vel[i] *= magic::TIME_PARAMETRIZATION_VELOCITY_DECREASE_FACTOR;
+                        change = true;
+                    }
+            }
+    }
+
 }

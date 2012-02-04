@@ -287,6 +287,34 @@ namespace ompl
                 return *val;
             }
 
+            /** \brief Access a double value from this state contains using its name. */
+            double& operator[](const std::string &name)
+            {
+                const std::map<std::string, StateSpace::ValueLocation> &vm = space_->getValueLocationsByName();
+                std::map<std::string, StateSpace::ValueLocation>::const_iterator it = vm.find(name);
+                if (it != vm.end())
+                {
+                    double *val = space_->getValueAddressAtLocation(state_, it->second);
+                    if (val)
+                        return *val;
+                }
+                throw Exception("Name '" + name + "' not known");
+            }
+
+            /** \brief Access a double value from this state contains using its name. */
+            double operator[](const std::string &name) const
+            {
+                const std::map<std::string, StateSpace::ValueLocation> &vm = space_->getValueLocationsByName();
+                std::map<std::string, StateSpace::ValueLocation>::const_iterator it = vm.find(name);
+                if (it != vm.end())
+                {
+                    const double *val = space_->getValueAddressAtLocation(state_, it->second);
+                    if (val)
+                        return *val;
+                }
+                throw Exception("Name '" + name + "' not known");
+            }
+
             /** \brief Compute the distance to another state. */
             template<class O>
             double distance(const ScopedState<O> &other) const
@@ -384,9 +412,9 @@ namespace ompl
 
         private:
 
-            StateSpacePtr         space_;
-            StateSamplerPtr  sampler_;
-            StateType               *state_;
+            StateSpacePtr                   space_;
+            StateSamplerPtr                 sampler_;
+            StateType                      *state_;
         };
 
         /** \addtogroup stateAndSpaceOperators Operators for States and State Spaces

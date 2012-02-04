@@ -40,6 +40,7 @@
 #include "ompl/datastructures/Grid.h"
 #include "ompl/geometric/planners/PlannerIncludes.h"
 #include "ompl/base/ProjectionEvaluator.h"
+#include "ompl/datastructures/PDF.h"
 #include <vector>
 
 namespace ompl
@@ -67,7 +68,7 @@ namespace ompl
            D. Hsu, J.-C. Latombe, and R. Motwani, Path planning in expansive configuration spaces,
            <em>Intl. J. Computational Geometry and Applications</em>,
            vol. 9, no. 4-5, pp. 495–512, 1999. DOI: <a href="http://dx.doi.org/10.1142/S0218195999000285">10.1142/S0218195999000285</a><br>
-           <a href="http://motion.comp.nus.edu.sg/papers/ijcga96.pdf">[PDF]</a>
+           <a href="http://bigbird.comp.nus.edu.sg/pmwiki/farm/motion/uploads/Site/ijcga96.pdf">[PDF]</a>
 
         */
 
@@ -77,17 +78,9 @@ namespace ompl
         public:
 
             /** \brief Constructor */
-            EST(const base::SpaceInformationPtr &si) : base::Planner(si, "EST")
-            {
-                specs_.approximateSolutions = true;
-                goalBias_ = 0.05;
-                maxDistance_ = 0.0;
-            }
+            EST(const base::SpaceInformationPtr &si);
 
-            virtual ~EST(void)
-            {
-                freeMemory();
-            }
+            virtual ~EST(void);
 
             virtual bool solve(const base::PlannerTerminationCondition &ptc);
 
@@ -178,8 +171,41 @@ namespace ompl
                 Motion            *parent;
             };
 
-            /** \brief An array of motions */
-            typedef std::vector<Motion*> MotionSet;
+            struct MotionInfo;
+
+            /** \brief A grid cell */
+            typedef Grid<MotionInfo>::Cell GridCell;
+
+            /** \brief A PDF of grid cells */
+            typedef PDF<GridCell*>        CellPDF;
+
+            /** \brief A struct containing an array of motions and a corresponding PDF element */
+            struct MotionInfo
+            {
+                Motion* operator[](unsigned int i)
+                {
+                    return motions_[i];
+                }
+                const Motion* operator[](unsigned int i) const
+                {
+                    return motions_[i];
+                }
+                void push_back(Motion* m)
+                {
+                    motions_.push_back(m);
+                }
+                unsigned int size(void) const
+                {
+                    return motions_.size();
+                }
+                bool empty(void) const
+                {
+                    return motions_.empty();
+                }
+                std::vector<Motion*> motions_;
+                CellPDF::Element*    elem_;
+            };
+
 
             /** \brief The data contained by a tree of exploration */
             struct TreeData
@@ -189,7 +215,7 @@ namespace ompl
                 }
 
                 /** \brief A grid where each cell contains an array of motions */
-                Grid<MotionSet> grid;
+                Grid<MotionInfo> grid;
 
                 /** \brief The total number of motions in the grid */
                 unsigned int    size;
@@ -221,6 +247,9 @@ namespace ompl
 
             /** \brief The random number generator */
             RNG                          rng_;
+
+            /** \brief The PDF used for selecting a cell from which to sample a motion */
+            CellPDF                      pdf_;
         };
 
     }

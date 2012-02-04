@@ -79,10 +79,10 @@ namespace ompl
         typedef std::map<std::string, std::string> RunProperties;
 
         /** \brief Signature of function that can be called before a planner execution is started */
-        typedef boost::function1<void, const base::PlannerPtr&> PreSetupEvent;
+        typedef boost::function<void(const base::PlannerPtr&)> PreSetupEvent;
 
         /** \brief Signature of function that can be called after a planner execution is completed */
-        typedef boost::function2<void, const base::PlannerPtr&, RunProperties&> PostSetupEvent;
+        typedef boost::function<void(const base::PlannerPtr&, RunProperties&)> PostSetupEvent;
 
         /** \brief The data collected after running a planner multiple times */
         struct PlannerExperiment
@@ -95,6 +95,11 @@ namespace ompl
 
             /// Some common properties for all the runs
             RunProperties              common;
+
+            bool operator==(const PlannerExperiment& p) const
+            {
+                return name==p.name && runs==p.runs && common==p.common;
+            }
         };
 
         /** \brief This structure holds experimental data for a set of planners */
@@ -112,6 +117,9 @@ namespace ompl
             /// The maximum allowed memory for planner computation during the experiment (MB)
             double                         maxMem;
 
+            /// The number of runs to execute for each planner
+            unsigned int                   runCount;
+
             /// The point in time when the experiment was started
             time::point                    startTime;
 
@@ -126,6 +134,37 @@ namespace ompl
 
             /// Hostname that identifies the machine the benchmark ran on
             std::string                    host;
+        };
+
+        /** \brief Representation of a benchmark request */
+        struct Request
+        {
+            Request(double maxTime = 5.0, double maxMem = 4096.0,
+                unsigned int runCount = 100, bool displayProgress = true,
+                bool saveConsoleOutput = true, bool useThreads = true)
+                : maxTime(maxTime), maxMem(maxMem), runCount(runCount),
+                displayProgress(displayProgress), saveConsoleOutput(saveConsoleOutput),
+                useThreads(useThreads)
+            {
+            }
+
+            /// \brief the maximum amount of time a planner is allowed to run (seconds); 5.0 by default
+            double       maxTime;
+
+            /// \brief the maximum amount of memory a planner is allowed to use (MB); 4096.0 by default
+            double       maxMem;
+
+            /// \brief the number of times to run each planner; 100 by default
+            unsigned int runCount;
+
+            /// \brief flag indicating whether progress is to be displayed or not; true by default
+            bool         displayProgress;
+
+            /// \brief flag indicating whether console output is saved (in an automatically generated filename); true by default
+            bool         saveConsoleOutput;
+
+            /// \brief flag indicating whether planner runs should be run in a separate thread. It is advisable to set this to \c true, so that a crashing planner doesn't result in a crash of the benchmark program. However, in the Python bindings this is set to \c false to avoid multi-threading problems in Python.
+            bool         useThreads;
         };
 
         /** \brief Constructor needs the SimpleSetup instance needed for planning. Optionally, the experiment name (\e name) can be specified */
@@ -156,10 +195,7 @@ namespace ompl
             return exp_.name;
         }
 
-        /** \brief Set the planner to use. If the planner is not
-            set, an attempt is made to use the planner
-            allocator. If no planner allocator is available
-            either, a default planner is set. */
+        /** \brief Add a planner to use. */
         void addPlanner(const base::PlannerPtr &planner)
         {
             if (planner && planner->getSpaceInformation().get() !=
@@ -168,9 +204,7 @@ namespace ompl
             planners_.push_back(planner);
         }
 
-        /** \brief Set the planner allocator to use. This is only
-            used if no planner has been set. This is optional -- a default
-            planner will be used if no planner is otherwise specified. */
+        /** \brief Add a planner allocator to use. */
         void addPlannerAllocator(const base::PlannerAllocator &pa)
         {
             planners_.push_back(pa(gsetup_ ? gsetup_->getSpaceInformation() : csetup_->getSpaceInformation()));
@@ -180,6 +214,12 @@ namespace ompl
         void clearPlanners(void)
         {
             planners_.clear();
+        }
+
+        /// Set the event to be called before any runs of a particular planner (when the planner is switched)
+        void setPlannerSwitchEvent(const PreSetupEvent &event)
+        {
+            plannerSwitch_ = event;
         }
 
         /// Set the event to be called before the run of a planner
@@ -195,11 +235,7 @@ namespace ompl
         }
 
         /** \brief Benchmark the added planners on the defined problem. Repeated calls clear previously gathered data.
-            \param maxTime the maximum amount of time a planner is allowed to run (seconds)
-            \param maxMem the maximum amount of memory a planner is allowed to use (MB)
-            \param runCount the number of times to run each planner
-            \param displayProgress flag indicating whether progress is to be displayed or not
-
+            \param req The parameters for the execution of the benchmark
             \note The values returned for memory consumption may
             be misleading. Memory allocators often free memory in
             a lazy fashion, so the returned values for memory
@@ -207,9 +243,9 @@ namespace ompl
             each run. Since not all the memory for the previous
             run was freed, the increase in usage may be close to
             0. To get correct averages for memory usage, use \e
-            runCount = 1 and run the process multiple times.
+            req.runCount = 1 and run the process multiple times.
         */
-        virtual void benchmark(double maxTime, double maxMem, unsigned int runCount, bool displayProgress = false);
+        virtual void benchmark(const Request &req);
 
         /** \brief Get the status of the benchmarking code. This function can be called in a separate thread to check how much progress has been made */
         const Status& getStatus(void) const
@@ -251,6 +287,9 @@ namespace ompl
 
         /// The current status of this benchmarking instance
         Status                        status_;
+
+        /// Event to be called when the evaluated planner is switched
+        PreSetupEvent                 plannerSwitch_;
 
         /// Event to be called before the run of a planner
         PreSetupEvent                 preRun_;

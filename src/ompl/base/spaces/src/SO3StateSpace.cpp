@@ -128,6 +128,20 @@ void ompl::base::SO3StateSpace::copyState(State *destination, const State *sourc
     qdestination->w = qsource->w;
 }
 
+unsigned int ompl::base::SO3StateSpace::getSerializationLength(void) const
+{
+    return sizeof(double) * 4;
+}
+
+void ompl::base::SO3StateSpace::serialize(void *serialization, const State *state) const
+{
+    memcpy(serialization, &state->as<StateType>()->x, sizeof(double) * 4);
+}
+
+void ompl::base::SO3StateSpace::deserialize(State *state, const void *serialization) const
+{
+    memcpy(&state->as<StateType>()->x, serialization, sizeof(double) * 4);
+}
 
 /*
 Based on code from :
@@ -186,7 +200,7 @@ void ompl::base::SO3StateSpace::interpolate(const State *from, const State *to, 
     }
 }
 
-ompl::base::StateSamplerPtr ompl::base::SO3StateSpace::allocStateSampler(void) const
+ompl::base::StateSamplerPtr ompl::base::SO3StateSpace::allocDefaultStateSampler(void) const
 {
     return StateSamplerPtr(new SO3StateSampler(this));
 }

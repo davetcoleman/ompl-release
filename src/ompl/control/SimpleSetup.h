@@ -51,6 +51,12 @@ namespace ompl
 
     namespace control
     {
+        /// @cond IGNORE
+        ClassForward(SimpleSetup);
+        /// @endcond
+
+        /** \class ompl::control::SimpleSetupPtr
+            \brief A boost shared pointer wrapper for ompl::control::SimpleSetup */
 
         /** \brief Create the set of classes typically needed to solve a
             control problem */
@@ -60,11 +66,7 @@ namespace ompl
 
             /** \brief Constructor needs the control space used for planning. */
             explicit
-            SimpleSetup(const ControlSpacePtr &space) : configured_(false), planTime_(0.0), msg_("SimpleSetup")
-            {
-                si_.reset(new SpaceInformation(space->getStateSpace(), space));
-                pdef_.reset(new base::ProblemDefinition(si_));
-            }
+            SimpleSetup(const ControlSpacePtr &space);
 
             virtual ~SimpleSetup(void)
             {
@@ -117,11 +119,15 @@ namespace ompl
                 return planner_;
             }
 
-            /** \brief Return true if a solution path is available (previous call to solve() was successful) and the solution is exact (not approximate) */
-            bool haveExactSolutionPath(void) const
+            /** \brief Get the planner allocator */
+            const base::PlannerAllocator& getPlannerAllocator(void) const
             {
-                return haveSolutionPath() && !getGoal()->isApproximate();
+                return pa_;
             }
+
+            /** \brief Return true if a solution path is available (previous call to solve() was successful) and the solution is exact (not approximate) */
+            bool haveExactSolutionPath(void) const;
+
 
             /** \brief Return true if a solution path is available (previous call to solve() was successful). The solution may be approximate. */
             bool haveSolutionPath(void) const
@@ -242,6 +248,18 @@ namespace ompl
                 function automatically. */
             virtual void setup(void);
 
+            /** \brief Get the  parameters for this planning context */
+            base::ParamSet& params(void)
+            {
+                return params_;
+            }
+
+            /** \brief Get the  parameters for this planning context */
+            const base::ParamSet& params(void) const
+            {
+                return params_;
+            }
+
         protected:
 
             /// The created space information
@@ -261,6 +279,9 @@ namespace ompl
 
             /// The amount of time the last planning step took
             double                        planTime_;
+
+            /// The parameters that describe the planning context
+            base::ParamSet                params_;
 
             /// Interface for console output
             msg::Interface                msg_;

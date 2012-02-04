@@ -2,6 +2,7 @@ if(OMPL_IN_ROS)
     option(OMPL_BUILD_TESTS "Build OMPL tests" ON)
 else(OMPL_IN_ROS)
     find_package(GTest)
+    find_package(Threads)
     option(OMPL_BUILD_TESTS "Build OMPL tests" ${GTEST_FOUND})
 endif(OMPL_IN_ROS)
 
@@ -21,7 +22,9 @@ if(OMPL_IN_ROS)
     endmacro(add_ompl_python_test)
 
 else(OMPL_IN_ROS)
-    include_directories(${GTEST_INCLUDE_DIRS})
+    if(GTEST_FOUND)
+        include_directories(${GTEST_INCLUDE_DIRS})
+    endif()
 
     macro(add_ompl_test test_name)
         add_executable(${ARGV})
@@ -30,7 +33,7 @@ else(OMPL_IN_ROS)
             ${Boost_FILESYSTEM_LIBRARY}
             ${Boost_SYSTEM_LIBRARY}
             ${Boost_THREAD_LIBRARY}
-            ${Boost_DATE_TIME_LIBRARY} ${GTEST_LIBRARIES})
+            ${Boost_DATE_TIME_LIBRARY} ${GTEST_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
         add_test(${test_name} ${EXECUTABLE_OUTPUT_PATH}/${test_name})
     endmacro(add_ompl_test)
 

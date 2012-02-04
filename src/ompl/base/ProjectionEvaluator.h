@@ -40,6 +40,8 @@
 #include "ompl/base/State.h"
 #include "ompl/util/ClassForward.h"
 #include "ompl/util/Console.h"
+#include "ompl/base/GenericParam.h"
+
 #include <vector>
 #include <valarray>
 #include <iostream>
@@ -112,10 +114,14 @@ namespace ompl
             Matrix mat;
         };
 
+        /// @cond IGNORE
         ClassForward(StateSpace);
+        /// @endcond
 
+        /// @cond IGNORE
         /** \brief Forward declaration of ompl::base::ProjectionEvaluator */
         ClassForward(ProjectionEvaluator);
+        /// @endcond
 
         /** \class ompl::base::ProjectionEvaluatorPtr
             \brief A boost shared pointer wrapper for ompl::base::ProjectionEvaluator */
@@ -131,18 +137,12 @@ namespace ompl
         public:
 
             /** \brief Construct a projection evaluator for a specific state space */
-            ProjectionEvaluator(const StateSpace *space) : space_(space), defaultCellSizes_(true), cellSizesWereInferred_(false)
-            {
-            }
+            ProjectionEvaluator(const StateSpace *space);
 
             /** \brief Construct a projection evaluator for a specific state space */
-            ProjectionEvaluator(const StateSpacePtr &space) : space_(space.get()), defaultCellSizes_(true), cellSizesWereInferred_(false)
-            {
-            }
+            ProjectionEvaluator(const StateSpacePtr &space);
 
-            virtual ~ProjectionEvaluator(void)
-            {
-            }
+            virtual ~ProjectionEvaluator(void);
 
             /** \brief Return the dimension of the projection defined by this evaluator */
             virtual unsigned int getDimension(void) const = 0;
@@ -157,7 +157,16 @@ namespace ompl
                 function, setup() will not call
                 defaultCellSizes() or inferCellSizes() any
                 more. */
-            void setCellSizes(const std::vector<double> &cellSizes);
+            virtual void setCellSizes(const std::vector<double> &cellSizes);
+
+            /** \brief Set the cell sizes to \e cellSize for a particular dimension \e dim. This function simply calls getCellSizes(),
+                modifies the desired dimension and then calls setCellSizes(). This is done intentionally to enforce a call to setCellSizes(). */
+            void setCellSizes(unsigned int dim, double cellSize);
+
+            /** \brief Multiply the cell sizes in each dimension by a specified factor \e factor. This function does nothing
+                if cell sizes have not been set. If cell sizes have been set (irrespective of source; e.g., user, default or inferred),
+                this function will then call setCellSizes(), so the source of the cell sizes will be considered to be the user. */
+            void mulCellSizes(double factor);
 
             /** \brief Return true if any user configuration has been done to this projection evaluator (setCellSizes() was called) */
             bool userConfigured(void) const;
@@ -167,6 +176,9 @@ namespace ompl
             {
                 return cellSizes_;
             }
+
+            /** \brief Get the size of a particular dimension of a grid cell  */
+            double getCellSizes(unsigned int dim) const;
 
             /** \brief Check if cell dimensions match projection dimension */
             void checkCellSizes(void) const;
@@ -198,6 +210,18 @@ namespace ompl
                 computeCoordinates(projection, coord);
             }
 
+            /** \brief Get the parameters for this projection */
+            ParamSet& params(void)
+            {
+                return params_;
+            }
+
+            /** \brief Get the parameters for this projection */
+            const ParamSet& params(void) const
+            {
+                return params_;
+            }
+
             /** \brief Print settings about this projection */
             virtual void printSettings(std::ostream &out = std::cout) const;
 
@@ -224,8 +248,48 @@ namespace ompl
                 were automatically inferred. */
             bool                 cellSizesWereInferred_;
 
+            /** \brief The set of parameters for this projection */
+            ParamSet             params_;
+
             /** \brief The console interface */
             msg::Interface       msg_;
+        };
+
+        /** \brief If the projection for a CompoundStateSpace is
+            supposed to be the same as the one for one of its included
+            subspaces, this class facilitates selecting a projection
+            of that subspace. */
+        class SubSpaceProjectionEvaluator : public ProjectionEvaluator
+        {
+        public:
+
+            /** \brief The constructor states that for space \e space,
+                the projection to use is the same as the component at
+                position \e index of space \e space. The actual
+                projection to use can be specified by \e projToUse. If
+                the projection is not specified, the default one for
+                the subspace at position \e index is used. */
+            SubSpaceProjectionEvaluator(const StateSpace *space, unsigned int index, const ProjectionEvaluatorPtr &projToUse = ProjectionEvaluatorPtr());
+
+            virtual void setup(void);
+
+            virtual unsigned int getDimension(void) const;
+
+            virtual void project(const State *state, EuclideanProjection &projection) const;
+
+        protected:
+
+            /** \brief The index of the subspace from which to project */
+            unsigned int           index_;
+
+            /** \brief The projection to use. This is either the same
+                as \e specifiedProj_ or, if specifiedProj_ is not
+                initialized, it is the default projection for the
+                subspace at index \e index_ */
+            ProjectionEvaluatorPtr proj_;
+
+            /** \brief The projection that is optionally specified by the user in the constructor argument (\e projToUse) */
+            ProjectionEvaluatorPtr specifiedProj_;
         };
 
     }

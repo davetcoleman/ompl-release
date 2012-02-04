@@ -66,9 +66,10 @@ namespace ompl
         (dynamic) */
     namespace base
     {
-
+        /// @cond IGNORE
         /** \brief Forward declaration of ompl::base::SpaceInformation */
         ClassForward(SpaceInformation);
+        /// @endcond
 
         /** \class ompl::base::SpaceInformationPtr
             \brief A boost shared pointer wrapper for ompl::base::SpaceInformation */
@@ -76,7 +77,7 @@ namespace ompl
         /** \brief If no state validity checking class is specified
             (StateValidityChecker), a boost function can be specified
             instead */
-        typedef boost::function1<bool, const State*> StateValidityCheckerFn;
+        typedef boost::function<bool(const State*)> StateValidityCheckerFn;
 
 
         /** \brief The base class for space information. This contains
@@ -270,14 +271,12 @@ namespace ompl
                 allocated. */
             ValidStateSamplerPtr allocValidStateSampler(void) const;
 
-
             /** \brief Set the allocator to use for a valid state sampler. This replaces the default uniform valid state
                 sampler. This call can be made at any time, but it should not be changed while ompl::base::Planner::solve() is executing */
-            void setValidStateSamplerAllocator(const ValidStateSamplerAllocator &vssa)
-            {
-                vssa_ = vssa;
-                setup_ = false;
-            }
+            void setValidStateSamplerAllocator(const ValidStateSamplerAllocator &vssa);
+
+            /** \brief Clear the allocator used for the valid state sampler. This will revert to using the uniform valid state sampler (the default). */
+            void clearValidStateSamplerAllocator(void);
 
             /** @}*/
 
@@ -375,6 +374,18 @@ namespace ompl
             /** \brief Print properties of the current instance of the state space */
             virtual void printProperties(std::ostream &out = std::cout) const;
 
+            /** \brief Get the combined parameters for the classes that the space information manages */
+            ParamSet& params(void)
+            {
+                return params_;
+            }
+
+            /** \brief Get the combined parameters for the classes that the space information manages */
+            const ParamSet& params(void) const
+            {
+                return params_;
+            }
+
             /** \brief Perform additional setup tasks (run once,
                 before use). If state validity checking resolution has
                 not been set, estimateMaxResolution() is called to
@@ -400,6 +411,9 @@ namespace ompl
 
             /** \brief The optional valid state sampler allocator */
             ValidStateSamplerAllocator vssa_;
+
+            /** \brief Combined parameters for the contained classes */
+            ParamSet                   params_;
 
             /** \brief The console interface */
             msg::Interface             msg_;

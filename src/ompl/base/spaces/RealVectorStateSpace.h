@@ -147,13 +147,19 @@ namespace ompl
 
             virtual void copyState(State *destination, const State *source) const;
 
+            virtual unsigned int getSerializationLength(void) const;
+
+            virtual void serialize(void *serialization, const State *state) const;
+
+            virtual void deserialize(State *state, const void *serialization) const;
+
             virtual double distance(const State *state1, const State *state2) const;
 
             virtual bool equalStates(const State *state1, const State *state2) const;
 
             virtual void interpolate(const State *from, const State *to, const double t, State *state) const;
 
-            virtual StateSamplerPtr allocStateSampler(void) const;
+            virtual StateSamplerPtr allocDefaultStateSampler(void) const;
 
             virtual State* allocState(void) const;
 

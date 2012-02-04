@@ -35,8 +35,6 @@
 /* Author: Ioan Sucan */
 
 #include <gtest/gtest.h>
-#include <boost/filesystem.hpp>
-#include <libgen.h>
 #include <iostream>
 
 #include "ompl/base/ScopedState.h"
@@ -49,6 +47,8 @@
 #include "ompl/base/spaces/SE2StateSpace.h"
 #include "ompl/base/spaces/SE3StateSpace.h"
 #include "ompl/base/spaces/DiscreteStateSpace.h"
+#include "ompl/base/spaces/ReedsSheppStateSpace.h"
+#include "ompl/base/spaces/DubinsStateSpace.h"
 
 #include <boost/math/constants/constants.hpp>
 
@@ -61,6 +61,36 @@ const double PI = boost::math::constants::pi<double>();
 bool isValid(const base::State *)
 {
     return true;
+}
+
+TEST(Dubins, Simple)
+{
+    base::StateSpacePtr d(new base::DubinsStateSpace()), dsym(new base::DubinsStateSpace(1., true));
+
+    base::RealVectorBounds bounds2(2);
+    bounds2.setLow(-3);
+    bounds2.setHigh(3);
+    d->as<base::DubinsStateSpace>()->setBounds(bounds2);
+    dsym->as<base::DubinsStateSpace>()->setBounds(bounds2);
+
+    d->setup();
+    d->sanityChecks();
+
+    dsym->setup();
+    dsym->sanityChecks();
+}
+
+TEST(ReedsShepp, Simple)
+{
+    base::StateSpacePtr d(new base::ReedsSheppStateSpace());
+
+    base::RealVectorBounds bounds2(2);
+    bounds2.setLow(-3);
+    bounds2.setHigh(3);
+    d->as<base::ReedsSheppStateSpace>()->setBounds(bounds2);
+
+    d->setup();
+    d->sanityChecks();
 }
 
 

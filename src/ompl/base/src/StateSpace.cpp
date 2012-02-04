@@ -35,8 +35,10 @@
 #include "ompl/base/StateSpace.h"
 #include "ompl/util/Exception.h"
 #include "ompl/tools/config/MagicConstants.h"
+#include "ompl/base/spaces/RealVectorStateSpace.h"
 #include <boost/thread/mutex.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/bind.hpp>
 #include <numeric>
 #include <limits>
 #include <queue>
@@ -50,8 +52,17 @@ namespace ompl
 {
     namespace base
     {
-        static std::list<StateSpace*> STATE_SPACE_LIST;
-        static boost::mutex           STATE_SPACE_LIST_LOCK;
+        struct AllocatedSpaces
+        {
+            std::list<StateSpace*> list_;
+            boost::mutex           lock_;
+        };
+
+        static AllocatedSpaces& getAllocatedSpaces(void)
+        {
+            static AllocatedSpaces as;
+            return as;
+        }
     }
 }
 /// @endcond
@@ -69,9 +80,6 @@ ompl::base::StateSpace::StateSpace(void)
     name_ = "Space" + boost::lexical_cast<std::string>(m);
     msg_.setPrefix(name_);
 
-    boost::mutex::scoped_lock smLock(STATE_SPACE_LIST_LOCK);
-    STATE_SPACE_LIST.push_back(this);
-
     longestValidSegment_ = 0.0;
     longestValidSegmentFraction_ = 0.01; // 1%
     longestValidSegmentCountFactor_ = 1;
@@ -79,13 +87,96 @@ ompl::base::StateSpace::StateSpace(void)
     type_ = STATE_SPACE_UNKNOWN;
 
     maxExtent_ = std::numeric_limits<double>::infinity();
+
+    params_.declareParam<double>("longest_valid_segment_fraction", msg_,
+                                 boost::bind(&StateSpace::setLongestValidSegmentFraction, this, _1),
+                                 boost::bind(&StateSpace::getLongestValidSegmentFraction, this));
+
+    params_.declareParam<unsigned int>("valid_segment_count_factor", msg_,
+                                       boost::bind(&StateSpace::setValidSegmentCountFactor, this, _1),
+                                       boost::bind(&StateSpace::getValidSegmentCountFactor, this));
+    AllocatedSpaces &as = getAllocatedSpaces();
+    boost::mutex::scoped_lock smLock(as.lock_);
+    as.list_.push_back(this);
 }
 
 ompl::base::StateSpace::~StateSpace(void)
 {
-    boost::mutex::scoped_lock smLock(STATE_SPACE_LIST_LOCK);
-    STATE_SPACE_LIST.remove(this);
+    AllocatedSpaces &as = getAllocatedSpaces();
+    boost::mutex::scoped_lock smLock(as.lock_);
+    as.list_.remove(this);
 }
+
+/// @cond IGNORE
+namespace ompl
+{
+    namespace base
+    {
+        static void computeStateSpaceSignatureHelper(const StateSpace *space, std::vector<int> &signature)
+        {
+            signature.push_back(space->getType());
+            signature.push_back(space->getDimension());
+
+            if (space->isCompound())
+            {
+                unsigned int c = space->as<CompoundStateSpace>()->getSubSpaceCount();
+                for (unsigned int i = 0 ; i < c ; ++i)
+                    computeStateSpaceSignatureHelper(space->as<CompoundStateSpace>()->getSubSpace(i).get(), signature);
+            }
+        }
+
+        void computeLocationsHelper(const StateSpace *s, std::vector<StateSpace::ValueLocation> &locationsArray,
+                                    std::map<std::string, StateSpace::ValueLocation> &locationsMap, StateSpace::ValueLocation loc)
+        {
+            State *test = s->allocState();
+            if (s->getValueAddressAtIndex(test, 0) != NULL)
+            {
+                loc.index = 0;
+                loc.space = s;
+                locationsMap[s->getName()] = loc;
+                // if the space is compound, we will find this value again in the first subspace
+                if (!s->isCompound())
+                {
+                    if (s->getType() == base::STATE_SPACE_REAL_VECTOR)
+                    {
+                        const std::string &name = s->as<base::RealVectorStateSpace>()->getDimensionName(0);
+                        if (!name.empty())
+                            locationsMap[name] = loc;
+                    }
+                    locationsArray.push_back(loc);
+                    while (s->getValueAddressAtIndex(test, ++loc.index) != NULL)
+                    {
+                        if (s->getType() == base::STATE_SPACE_REAL_VECTOR)
+                        {
+                            const std::string &name = s->as<base::RealVectorStateSpace>()->getDimensionName(loc.index);
+                            if (!name.empty())
+                                locationsMap[name] = loc;
+                        }
+                        locationsArray.push_back(loc);
+                    }
+                }
+            }
+            s->freeState(test);
+
+            if (s->isCompound())
+                for (unsigned int i = 0 ; i < s->as<base::CompoundStateSpace>()->getSubSpaceCount() ; ++i)
+                {
+                    loc.chain.push_back(i);
+                    computeLocationsHelper(s->as<base::CompoundStateSpace>()->getSubSpace(i).get(), locationsArray, locationsMap, loc);
+                    loc.chain.pop_back();
+                }
+        }
+
+        void computeLocationsHelper(const StateSpace *s, std::vector<StateSpace::ValueLocation> &locationsArray,
+                                    std::map<std::string, StateSpace::ValueLocation> &locationsMap)
+        {
+            locationsArray.clear();
+            locationsMap.clear();
+            computeLocationsHelper(s, locationsArray, locationsMap, StateSpace::ValueLocation());
+        }
+    }
+}
+/// @endcond
 
 const std::string& ompl::base::StateSpace::getName(void) const
 {
@@ -96,6 +187,20 @@ void ompl::base::StateSpace::setName(const std::string &name)
 {
     name_ = name;
     msg_.setPrefix(name_);
+
+    // we don't want to call this function during the state space construction,
+    // so we check if any values were previously inserted as value locations;
+    // if none were, then we either have none (so no need to call this function again)
+    // or setup() was not yet called
+    if (!valueLocationsInOrder_.empty())
+        computeLocationsHelper(this, valueLocationsInOrder_, valueLocationsByName_);
+}
+
+void ompl::base::StateSpace::computeSignature(std::vector<int> &signature) const
+{
+    signature.clear();
+    computeStateSpaceSignatureHelper(this, signature);
+    signature.insert(signature.begin(), signature.size());
 }
 
 void ompl::base::StateSpace::registerProjections(void)
@@ -110,6 +215,8 @@ void ompl::base::StateSpace::setup(void)
     if (longestValidSegment_ < std::numeric_limits<double>::epsilon())
         throw Exception("The longest valid segment for state space " + getName() + " must be positive");
 
+    computeLocationsHelper(this, valueLocationsInOrder_, valueLocationsByName_);
+
     // make sure we don't overwrite projections that have been configured by the user
     std::map<std::string, ProjectionEvaluatorPtr> oldProjections = projections_;
     registerProjections();
@@ -122,13 +229,98 @@ void ompl::base::StateSpace::setup(void)
                     projections_[it->first] = it->second;
         }
 
+    // remove previously set parameters for projections
+    std::vector<std::string> pnames;
+    params_.getParamNames(pnames);
+    for (std::vector<std::string>::const_iterator it = pnames.begin() ; it != pnames.end() ; ++it)
+        if (it->substr(0, 11) == "projection.")
+            params_.remove(*it);
+
+    // setup projections and add their parameters
     for (std::map<std::string, ProjectionEvaluatorPtr>::const_iterator it = projections_.begin() ; it != projections_.end() ; ++it)
+    {
         it->second->setup();
+        if (it->first == DEFAULT_PROJECTION_NAME)
+            params_.include(it->second->params(), "projection");
+        else
+            params_.include(it->second->params(), "projection." + it->first);
+    }
 }
 
 double* ompl::base::StateSpace::getValueAddressAtIndex(State *state, const unsigned int index) const
 {
     return NULL;
+}
+
+const double* ompl::base::StateSpace::getValueAddressAtIndex(const State *state, const unsigned int index) const
+{
+    double *val = getValueAddressAtIndex(const_cast<State*>(state), index); // this const-cast does not hurt, since the state is not modified
+    return val;
+}
+
+const std::vector<ompl::base::StateSpace::ValueLocation>& ompl::base::StateSpace::getValueLocations(void) const
+{
+    return valueLocationsInOrder_;
+}
+
+const std::map<std::string, ompl::base::StateSpace::ValueLocation>& ompl::base::StateSpace::getValueLocationsByName(void) const
+{
+    return valueLocationsByName_;
+}
+
+void ompl::base::StateSpace::copyToReals(std::vector<double> &reals, const State *source) const
+{
+    reals.resize(valueLocationsInOrder_.size());
+    for (std::size_t i = 0 ; i < valueLocationsInOrder_.size() ; ++i)
+        reals[i] = *getValueAddressAtLocation(source, valueLocationsInOrder_[i]);
+}
+
+void ompl::base::StateSpace::copyFromReals(State *destination, const std::vector<double> &reals) const
+{
+    assert(reals.size() == valueLocationsInOrder_.size());
+    for (std::size_t i = 0 ; i < reals.size() ; ++i)
+        *getValueAddressAtLocation(destination, valueLocationsInOrder_[i]) = reals[i];
+}
+
+double* ompl::base::StateSpace::getValueAddressAtLocation(State *state, const ValueLocation &loc) const
+{
+    std::size_t index = 0;
+    while (loc.chain.size() > index)
+        state = state->as<CompoundState>()->components[loc.chain[index++]];
+    return loc.space->getValueAddressAtIndex(state, loc.index);
+}
+
+const double* ompl::base::StateSpace::getValueAddressAtLocation(const State *state, const ValueLocation &loc) const
+{
+    std::size_t index = 0;
+    while (loc.chain.size() > index)
+        state = state->as<CompoundState>()->components[loc.chain[index++]];
+    return loc.space->getValueAddressAtIndex(state, loc.index);
+}
+
+double* ompl::base::StateSpace::getValueAddressAtName(State *state, const std::string &name) const
+{
+    std::map<std::string, ValueLocation>::const_iterator it = valueLocationsByName_.find(name);
+    return (it != valueLocationsByName_.end()) ? getValueAddressAtLocation(state, it->second) : NULL;
+}
+
+const double* ompl::base::StateSpace::getValueAddressAtName(const State *state, const std::string &name) const
+{
+    std::map<std::string, ValueLocation>::const_iterator it = valueLocationsByName_.find(name);
+    return (it != valueLocationsByName_.end()) ? getValueAddressAtLocation(state, it->second) : NULL;
+}
+
+unsigned int ompl::base::StateSpace::getSerializationLength(void) const
+{
+    return 0;
+}
+
+void ompl::base::StateSpace::serialize(void *serialization, const State *state) const
+{
+}
+
+void ompl::base::StateSpace::deserialize(State *state, const void *serialization) const
+{
 }
 
 void ompl::base::StateSpace::printState(const State *state, std::ostream &out) const
@@ -217,14 +409,23 @@ bool ompl::base::StateSpace::includes(const StateSpacePtr &other) const
     return StateSpaceIncludes(this, other.get());
 }
 
+void ompl::base::StateSpace::List(std::ostream &out)
+{
+    AllocatedSpaces &as = getAllocatedSpaces();
+    boost::mutex::scoped_lock smLock(as.lock_);
+    for (std::list<StateSpace*>::iterator it = as.list_.begin() ; it != as.list_.end(); ++it)
+        out << "@ " << *it << ": " << (*it)->getName() << std::endl;
+}
+
 void ompl::base::StateSpace::Diagram(std::ostream &out)
 {
-    boost::mutex::scoped_lock smLock(STATE_SPACE_LIST_LOCK);
+    AllocatedSpaces &as = getAllocatedSpaces();
+    boost::mutex::scoped_lock smLock(as.lock_);
     out << "digraph StateSpaces {" << std::endl;
-    for (std::list<StateSpace*>::iterator it = STATE_SPACE_LIST.begin() ; it != STATE_SPACE_LIST.end(); ++it)
+    for (std::list<StateSpace*>::iterator it = as.list_.begin() ; it != as.list_.end(); ++it)
     {
         out << '"' << (*it)->getName() << '"' << std::endl;
-        for (std::list<StateSpace*>::iterator jt = STATE_SPACE_LIST.begin() ; jt != STATE_SPACE_LIST.end(); ++jt)
+        for (std::list<StateSpace*>::iterator jt = as.list_.begin() ; jt != as.list_.end(); ++jt)
             if (it != jt)
             {
                 if ((*it)->isCompound() && (*it)->as<CompoundStateSpace>()->hasSubSpace((*jt)->getName()))
@@ -241,9 +442,11 @@ void ompl::base::StateSpace::Diagram(std::ostream &out)
 
 void ompl::base::StateSpace::sanityChecks(void) const
 {
-    static const double EPS  = std::numeric_limits<float>::epsilon(); // we want to allow for reduced accuracy in computation
-    static const double ZERO = std::numeric_limits<double>::epsilon();
+    sanityChecks(std::numeric_limits<double>::epsilon(), std::numeric_limits<float>::epsilon(), ~0);
+}
 
+void ompl::base::StateSpace::sanityChecks(double zero, double eps, unsigned int flags) const
+{
     // Test that distances are always positive
     {
         State *s1 = allocState();
@@ -253,17 +456,22 @@ void ompl::base::StateSpace::sanityChecks(void) const
         for (unsigned int i = 0 ; i < magic::TEST_STATE_COUNT ; ++i)
         {
             ss->sampleUniform(s1);
-            if (distance(s1, s1) > EPS)
+            if (flags & STATESPACE_DISTANCE_TO_SELF && distance(s1, s1) > eps)
                 throw Exception("Distance from a state to itself should be 0");
+            if (flags & STATESPACE_EQUAL_TO_SELF && !equalStates(s1, s1))
+                throw Exception("A state should be equal to itself");
             ss->sampleUniform(s2);
             if (!equalStates(s1, s2))
             {
                 double d12 = distance(s1, s2);
-                if (d12 < ZERO)
+                if (flags & STATESPACE_DISTANCE_DIFFERENT_STATES && d12 < zero)
                     throw Exception("Distance between different states should be above 0");
                 double d21 = distance(s2, s1);
-                if (fabs(d12 - d21) > EPS)
-                    throw Exception("The distance function should be symmetric");
+                if (flags & STATESPACE_DISTANCE_SYMMETRIC && fabs(d12 - d21) > eps)
+                    throw Exception("The distance function should be symmetric (A->B=" +
+                                    boost::lexical_cast<std::string>(d12) + ", B->A=" +
+                                    boost::lexical_cast<std::string>(d21) + ", difference is " +
+                                    boost::lexical_cast<std::string>(fabs(d12 - d21)) + ")");
             }
         }
 
@@ -287,24 +495,24 @@ void ompl::base::StateSpace::sanityChecks(void) const
             ss->sampleUniform(s3);
 
             interpolate(s1, s2, 0.0, s3);
-            if (distance(s1, s3) > EPS)
+            if (flags & STATESPACE_INTERPOLATION && distance(s1, s3) > eps)
                 throw Exception("Interpolation from a state at time 0 should be not change the original state");
 
             interpolate(s1, s2, 1.0, s3);
-            if (distance(s2, s3) > EPS)
+            if (flags & STATESPACE_INTERPOLATION && distance(s2, s3) > eps)
                 throw Exception("Interpolation to a state at time 1 should be the same as the final state");
 
             interpolate(s1, s2, 0.5, s3);
             double diff = distance(s1, s3) + distance(s3, s2) - distance(s1, s2);
-            if (fabs(diff) > EPS)
+            if (flags & STATESPACE_TRIANGLE_INEQUALITY && fabs(diff) > eps)
                 throw Exception("Interpolation to midpoint state does not lead to distances that satisfy the triangle inequality (" +
                                 boost::lexical_cast<std::string>(diff) + " difference)");
 
             interpolate(s3, s2, 0.5, s3);
             interpolate(s1, s2, 0.75, s2);
 
-            if (distance(s2, s3) > EPS)
-                throw Exception("Continued interpolation does not work as expected");
+            if (flags & STATESPACE_INTERPOLATION && distance(s2, s3) > eps)
+                throw Exception("Continued interpolation does not work as expected. Please also check that interpolate() works with overlapping memory for its state arguments");
         }
         freeState(s1);
         freeState(s2);
@@ -378,6 +586,24 @@ bool ompl::base::StateSpace::isHybrid(void) const
     return false;
 }
 
+void ompl::base::StateSpace::setStateSamplerAllocator(const StateSamplerAllocator &ssa)
+{
+    ssa_ = ssa;
+}
+
+void ompl::base::StateSpace::clearStateSamplerAllocator(void)
+{
+    ssa_ = StateSamplerAllocator();
+}
+
+ompl::base::StateSamplerPtr ompl::base::StateSpace::allocStateSampler(void) const
+{
+    if (ssa_)
+        return ssa_(this);
+    else
+        return allocDefaultStateSampler();
+}
+
 void ompl::base::StateSpace::setValidSegmentCountFactor(unsigned int factor)
 {
     if (factor < 1)
@@ -413,7 +639,7 @@ ompl::base::CompoundStateSpace::CompoundStateSpace(void) : StateSpace(), compone
 }
 
 ompl::base::CompoundStateSpace::CompoundStateSpace(const std::vector<StateSpacePtr> &components,
-                                                         const std::vector<double> &weights) : StateSpace(), componentCount_(0), locked_(false)
+                                                   const std::vector<double> &weights) : StateSpace(), componentCount_(0), locked_(false)
 {
     if (components.size() != weights.size())
         throw Exception("Number of component spaces and weights are not the same");
@@ -575,6 +801,36 @@ void ompl::base::CompoundStateSpace::copyState(State *destination, const State *
         components_[i]->copyState(cdest->components[i], csrc->components[i]);
 }
 
+unsigned int ompl::base::CompoundStateSpace::getSerializationLength(void) const
+{
+    unsigned int l = 0;
+    for (unsigned int i = 0 ; i < componentCount_ ; ++i)
+        l += components_[i]->getSerializationLength();
+    return l;
+}
+
+void ompl::base::CompoundStateSpace::serialize(void *serialization, const State *state) const
+{
+    const CompoundState *cstate = static_cast<const CompoundState*>(state);
+    unsigned int l = 0;
+    for (unsigned int i = 0 ; i < componentCount_ ; ++i)
+    {
+        components_[i]->serialize(reinterpret_cast<char*>(serialization) + l, cstate->components[i]);
+        l += components_[i]->getSerializationLength();
+    }
+}
+
+void ompl::base::CompoundStateSpace::deserialize(State *state, const void *serialization) const
+{
+    CompoundState *cstate = static_cast<CompoundState*>(state);
+    unsigned int l = 0;
+    for (unsigned int i = 0 ; i < componentCount_ ; ++i)
+    {
+        components_[i]->deserialize(cstate->components[i], reinterpret_cast<const char*>(serialization) + l);
+        l += components_[i]->getSerializationLength();
+    }
+}
+
 double ompl::base::CompoundStateSpace::distance(const State *state1, const State *state2) const
 {
     const CompoundState *cstate1 = static_cast<const CompoundState*>(state1);
@@ -625,14 +881,11 @@ void ompl::base::CompoundStateSpace::interpolate(const State *from, const State 
         components_[i]->interpolate(cfrom->components[i], cto->components[i], t, cstate->components[i]);
 }
 
-ompl::base::StateSamplerPtr ompl::base::CompoundStateSpace::allocStateSampler(void) const
+ompl::base::StateSamplerPtr ompl::base::CompoundStateSpace::allocDefaultStateSampler(void) const
 {
-    double totalWeight = std::accumulate(weights_.begin(), weights_.end(), 0.0);
-    if (totalWeight < std::numeric_limits<double>::epsilon())
-        totalWeight = 1.0;
     CompoundStateSampler *ss = new CompoundStateSampler(this);
     for (unsigned int i = 0 ; i < componentCount_ ; ++i)
-        ss->addSampler(components_[i]->allocStateSampler(), weights_[i] / totalWeight);
+        ss->addSampler(components_[i]->allocStateSampler(), weights_[i] * components_[i]->getMaximumExtent() / maxExtent_);
     return StateSamplerPtr(ss);
 }
 
@@ -1089,6 +1342,5 @@ namespace ompl
 
             return StateSpacePtr(new CompoundStateSpace(components, weights));
         }
-
     }
 }

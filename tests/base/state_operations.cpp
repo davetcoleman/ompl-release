@@ -35,9 +35,7 @@
 /* Author: Ioan Sucan */
 
 #include <gtest/gtest.h>
-#include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
-#include <libgen.h>
 #include <iostream>
 
 #include "ompl/base/ScopedState.h"
@@ -56,21 +54,23 @@ TEST(State, Scoped)
     b.setLow(0);
     b.setHigh(1);
     mSE3->setBounds(b);
-
+    mSE3->setup();
 
     base::CompoundStateSpace *mC0 = new base::CompoundStateSpace();
     base::StateSpacePtr pC0(mC0);
     mC0->addSubSpace(pSE3, 1.0);
+    mC0->setup();
 
     base::CompoundStateSpace *mC1 = new base::CompoundStateSpace();
     base::StateSpacePtr pC1(mC1);
     mC1->addSubSpace(pC0, 1.0);
+    mC1->setup();
 
     base::CompoundStateSpace *mC2 = new base::CompoundStateSpace();
     base::StateSpacePtr pC2(mC2);
     mC2->addSubSpace(mSE3->getSubSpace(1), 1.0);
     mC2->addSubSpace(mSE3->getSubSpace(0), 1.0);
-
+    mC2->setup();
 
     base::ScopedState<base::SE3StateSpace> sSE3(pSE3);
     base::ScopedState<base::RealVectorStateSpace> sSE3_R(mSE3->getSubSpace(0));
@@ -141,6 +141,12 @@ TEST(State, Scoped)
 
     sSE3_R = 0.5;
     EXPECT_EQ(sSE3_R[0], 0.5);
+
+    sSE3 << sSE3_R;
+    pSE3->setName("test");
+    EXPECT_EQ(sSE3["test"], 0.5);
+    sSE3["test"] = 0.1;
+    EXPECT_EQ(sSE3[0], 0.1);
 }
 
 TEST(State, ScopedRV)
