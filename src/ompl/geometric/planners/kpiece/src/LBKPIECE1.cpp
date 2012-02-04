@@ -1,0 +1,300 @@
+/*********************************************************************
+* Software License Agreement (BSD License)
+*
+*  Copyright (c) 2008, Willow Garage, Inc.
+*  All rights reserved.
+*
+*  Redistribution and use in source and binary forms, with or without
+*  modification, are permitted provided that the following conditions
+*  are met:
+*
+*   * Redistributions of source code must retain the above copyright
+*     notice, this list of conditions and the following disclaimer.
+*   * Redistributions in binary form must reproduce the above
+*     copyright notice, this list of conditions and the following
+*     disclaimer in the documentation and/or other materials provided
+*     with the distribution.
+*   * Neither the name of the Willow Garage nor the names of its
+*     contributors may be used to endorse or promote products derived
+*     from this software without specific prior written permission.
+*
+*  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+*  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+*  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+*  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+*  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+*  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+*  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+*  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+*  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+*  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+*  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+*  POSSIBILITY OF SUCH DAMAGE.
+*********************************************************************/
+
+/* Author: Ioan Sucan */
+
+#include "ompl/geometric/planners/kpiece/LBKPIECE1.h"
+#include "ompl/base/GoalSampleableRegion.h"
+#include "ompl/tools/config/SelfConfig.h"
+#include <cassert>
+
+void ompl::geometric::LBKPIECE1::setup(void)
+{
+    Planner::setup();
+    SelfConfig sc(si_, getName());
+    sc.configureProjectionEvaluator(projectionEvaluator_);
+    sc.configurePlannerRange(maxDistance_);
+
+    if (minValidPathFraction_ < std::numeric_limits<double>::epsilon() || minValidPathFraction_ > 1.0)
+        throw Exception("The minimum valid path fraction must be in the range (0,1]");
+
+    dStart_.setDimension(projectionEvaluator_->getDimension());
+    dGoal_.setDimension(projectionEvaluator_->getDimension());
+}
+
+bool ompl::geometric::LBKPIECE1::solve(const base::PlannerTerminationCondition &ptc)
+{
+    checkValidity();
+    base::GoalSampleableRegion *goal = dynamic_cast<base::GoalSampleableRegion*>(pdef_->getGoal().get());
+
+    if (!goal)
+    {
+        msg_.error("Unknown type of goal (or goal undefined)");
+        return false;
+    }
+
+    Discretization<Motion>::Coord xcoord;
+
+    while (const base::State *st = pis_.nextStart())
+    {
+        Motion* motion = new Motion(si_);
+        si_->copyState(motion->state, st);
+        motion->root = st;
+        motion->valid = true;
+        projectionEvaluator_->computeCoordinates(motion->state, xcoord);
+        dStart_.addMotion(motion, xcoord);
+    }
+
+    if (dStart_.getMotionCount() == 0)
+    {
+        msg_.error("Motion planning start tree could not be initialized!");
+        return false;
+    }
+
+    if (!goal->canSample())
+    {
+        msg_.error("Insufficient states in sampleable goal region");
+        return false;
+    }
+
+    if (!sampler_)
+        sampler_ = si_->allocStateSampler();
+
+    msg_.inform("Starting with %d states", (int)(dStart_.getMotionCount() + dGoal_.getMotionCount()));
+
+    base::State *xstate = si_->allocState();
+    bool      startTree = true;
+
+    while (ptc() == false)
+    {
+        Discretization<Motion> &disc      = startTree ? dStart_ : dGoal_;
+        startTree = !startTree;
+        Discretization<Motion> &otherDisc = startTree ? dStart_ : dGoal_;
+        disc.countIteration();
+
+        // if we have not sampled too many goals already
+        if (dGoal_.getMotionCount() == 0 || pis_.getSampledGoalsCount() < dGoal_.getMotionCount() / 2)
+        {
+            const base::State *st = dGoal_.getMotionCount() == 0 ? pis_.nextGoal(ptc) : pis_.nextGoal();
+            if (st)
+            {
+                Motion* motion = new Motion(si_);
+                si_->copyState(motion->state, st);
+                motion->root = motion->state;
+                motion->valid = true;
+                projectionEvaluator_->computeCoordinates(motion->state, xcoord);
+                dGoal_.addMotion(motion, xcoord);
+            }
+            if (dGoal_.getMotionCount() == 0)
+            {
+                msg_.error("Unable to sample any valid states for goal tree");
+                break;
+            }
+        }
+
+        Discretization<Motion>::Cell *ecell    = NULL;
+        Motion                       *existing = NULL;
+        disc.selectMotion(existing, ecell);
+        assert(existing);
+        sampler_->sampleUniformNear(xstate, existing->state, maxDistance_);
+
+        /* create a motion */
+        Motion* motion = new Motion(si_);
+        si_->copyState(motion->state, xstate);
+        motion->parent = existing;
+        motion->root = existing->root;
+        existing->children.push_back(motion);
+        projectionEvaluator_->computeCoordinates(motion->state, xcoord);
+        disc.addMotion(motion, xcoord);
+
+        /* attempt to connect trees */
+        Discretization<Motion>::Cell *ocell = otherDisc.getGrid().getCell(xcoord);
+        if (ocell && !ocell->data->motions.empty())
+        {
+            Motion* connectOther = ocell->data->motions[rng_.uniformInt(0, ocell->data->motions.size() - 1)];
+
+            if (goal->isStartGoalPairValid(startTree ? connectOther->root : motion->root, startTree ? motion->root : connectOther->root))
+            {
+                Motion* connect = new Motion(si_);
+                si_->copyState(connect->state, connectOther->state);
+                connect->parent = motion;
+                connect->root = motion->root;
+                motion->children.push_back(connect);
+                projectionEvaluator_->computeCoordinates(connect->state, xcoord);
+                disc.addMotion(connect, xcoord);
+
+                if (isPathValid(disc, connect, xstate) && isPathValid(otherDisc, connectOther, xstate))
+                {
+                    /* extract the motions and put them in solution vector */
+
+                    std::vector<Motion*> mpath1;
+                    while (motion != NULL)
+                    {
+                        mpath1.push_back(motion);
+                        motion = motion->parent;
+                    }
+
+                    std::vector<Motion*> mpath2;
+                    while (connectOther != NULL)
+                    {
+                        mpath2.push_back(connectOther);
+                        connectOther = connectOther->parent;
+                    }
+
+                    if (startTree)
+                        mpath1.swap(mpath2);
+
+                    PathGeometric *path = new PathGeometric(si_);
+                    path->states.reserve(mpath1.size() + mpath2.size());
+                    for (int i = mpath1.size() - 1 ; i >= 0 ; --i)
+                        path->states.push_back(si_->cloneState(mpath1[i]->state));
+                    for (unsigned int i = 0 ; i < mpath2.size() ; ++i)
+                        path->states.push_back(si_->cloneState(mpath2[i]->state));
+
+                    goal->setDifference(0.0);
+                    goal->setSolutionPath(base::PathPtr(path));
+                    break;
+                }
+            }
+        }
+    }
+
+    si_->freeState(xstate);
+
+    msg_.inform("Created %u (%u start + %u goal) states in %u cells (%u start (%u on boundary) + %u goal (%u on boundary))",
+                dStart_.getMotionCount() + dGoal_.getMotionCount(), dStart_.getMotionCount(), dGoal_.getMotionCount(),
+                dStart_.getCellCount() + dGoal_.getCellCount(), dStart_.getCellCount(), dStart_.getGrid().countExternal(),
+                dGoal_.getCellCount(), dGoal_.getGrid().countExternal());
+
+    return goal->isAchieved();
+}
+
+bool ompl::geometric::LBKPIECE1::isPathValid(Discretization<Motion> &disc, Motion *motion, base::State *temp)
+{
+    std::vector<Motion*> mpath;
+
+    /* construct the solution path */
+    while (motion != NULL)
+    {
+        mpath.push_back(motion);
+        motion = motion->parent;
+    }
+
+    std::pair<base::State*, double> lastValid;
+    lastValid.first = temp;
+
+    /* check the path */
+    for (int i = mpath.size() - 1 ; i >= 0 ; --i)
+        if (!mpath[i]->valid)
+        {
+            if (si_->checkMotion(mpath[i]->parent->state, mpath[i]->state, lastValid))
+                mpath[i]->valid = true;
+            else
+            {
+                Motion *parent = mpath[i]->parent;
+                removeMotion(disc, mpath[i]);
+
+                // add the valid part of the path, if sufficiently long
+                if (lastValid.second > minValidPathFraction_)
+                {
+                    Motion* reAdd = new Motion(si_);
+                    si_->copyState(reAdd->state, lastValid.first);
+                    reAdd->parent = parent;
+                    reAdd->root = parent->root;
+                    parent->children.push_back(reAdd);
+                    reAdd->valid = true;
+                    Discretization<Motion>::Coord coord;
+                    projectionEvaluator_->computeCoordinates(reAdd->state, coord);
+                    disc.addMotion(reAdd, coord);
+                }
+
+                return false;
+            }
+        }
+    return true;
+}
+
+void ompl::geometric::LBKPIECE1::removeMotion(Discretization<Motion> &disc, Motion *motion)
+{
+    /* remove from grid */
+
+    Discretization<Motion>::Coord coord;
+    projectionEvaluator_->computeCoordinates(motion->state, coord);
+    disc.removeMotion(motion, coord);
+
+    /* remove self from parent list */
+
+    if (motion->parent)
+    {
+        for (unsigned int i = 0 ; i < motion->parent->children.size() ; ++i)
+            if (motion->parent->children[i] == motion)
+            {
+                motion->parent->children.erase(motion->parent->children.begin() + i);
+                break;
+            }
+    }
+
+    /* remove children */
+    for (unsigned int i = 0 ; i < motion->children.size() ; ++i)
+    {
+        motion->children[i]->parent = NULL;
+        removeMotion(disc, motion->children[i]);
+    }
+
+    freeMotion(motion);
+}
+
+
+void ompl::geometric::LBKPIECE1::freeMotion(Motion *motion)
+{
+    if (motion->state)
+        si_->freeState(motion->state);
+    delete motion;
+}
+
+void ompl::geometric::LBKPIECE1::clear(void)
+{
+    Planner::clear();
+
+    sampler_.reset();
+    dStart_.clear();
+    dGoal_.clear();
+}
+
+void ompl::geometric::LBKPIECE1::getPlannerData(base::PlannerData &data) const
+{
+    Planner::getPlannerData(data);
+    dStart_.getPlannerData(data, 1);
+    dGoal_.getPlannerData(data, 2);
+}

@@ -1,0 +1,32 @@
+/**
+\page download Download
+
+\section download_release Releases
+
+- \b OMPL @OMPL_VERSION@, released @OMPL_RELEASE_DATE@ (<a href="releaseNotes.html">release notes</a>)<br>
+<a href="https://sourceforge.net/projects/ompl/files/ompl-@OMPL_VERSION@-Source.tar.gz" class="download">TGZ</a>
+<a href="https://sourceforge.net/projects/ompl/files/ompl-@OMPL_VERSION@-Source.zip" class="download">ZIP</a>
+- <a href="http://sourceforge.net/projects/ompl/files">Older releases</a>. See the \ref releaseNotes "release notes" for a brief a description of changes for each release.
+.
+
+\n\par
+Alternatively, you can use the <a
+href="http://www.ros.org/wiki/ompl">version included in ROS</a>.
+
+\section download_hg Mercurial
+
+The latest source is available via Mercurial. For anonymous checkout use:
+\code
+$ hg clone http://ompl.hg.sourceforge.net:8000/hgroot/ompl/ompl
+\endcode
+To view the source code right now in your browser, click <a href="http://ompl.hg.sourceforge.net/hgweb/ompl/ompl/">here</a>. Alternatively, get a zip snapshot <a href="http://ompl.hg.sourceforge.net/hgweb/ompl/ompl/archive/tip.zip">here</a>.
+<br><br>
+A <a href="http://www.ros.org">ROS</a> package providing the latest version of this library is available at:
+\code
+$ svn co https://rice-ros-pkg.svn.sourceforge.net/svnroot/rice-ros-pkg/ompl ompl
+\endcode
+
+\n\par
+Click <a href="installation.html">here</a> for installation instructions.
+
+*/
