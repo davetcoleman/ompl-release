@@ -1,0 +1,10 @@
+Package: ros-fuerte-ompl
+Version: 0.9.6-0oneiric
+Architecture: amd64
+Maintainer: Ioan Sucan <isucan@willowgarage.com>
+Installed-Size: 4780
+Depends: libboost-serialization1.46.1 (>= 1.46.1-1), libboost-thread1.46.1 (>= 1.46.1-1), libc6 (>= 2.4), libgcc1 (>= 1:4.1.1), libode1, libstdc++6 (>= 4.6), libboost1.46-all-dev, libgtest-dev, cmake
+Section: misc
+Priority: extra
+Homepage: http://ompl.kavrakilab.org
+Description: OMPL is a free sampling-based motion planning library.
