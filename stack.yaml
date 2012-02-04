@@ -1,0 +1,10 @@
+Catkin-ProjectName: ompl
+Version: 0.0.0
+Depends: 
+Description: 
+Author: 
+Maintainer: 
+Homepage: 
+
+Catkin-CopyrightType: willowgarage
+Catkin-DebRulesType: cmake
