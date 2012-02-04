@@ -154,7 +154,7 @@ const std::string& ompl::base::RealVectorStateSpace::getDimensionName(unsigned i
 int ompl::base::RealVectorStateSpace::getDimensionIndex(const std::string &name) const
 {
     std::map<std::string, unsigned int>::const_iterator it = dimensionIndex_.find(name);
-    return it != dimensionIndex_.end() ? it->second : -1;
+    return it != dimensionIndex_.end() ? (int)it->second : -1;
 }
 
 void ompl::base::RealVectorStateSpace::setDimensionName(unsigned int index, const std::string &name)
@@ -208,6 +208,21 @@ void ompl::base::RealVectorStateSpace::copyState(State *destination, const State
            static_cast<const StateType*>(source)->values, stateBytes_);
 }
 
+unsigned int ompl::base::RealVectorStateSpace::getSerializationLength(void) const
+{
+    return stateBytes_;
+}
+
+void ompl::base::RealVectorStateSpace::serialize(void *serialization, const State *state) const
+{
+    memcpy(serialization, state->as<StateType>()->values, stateBytes_);
+}
+
+void ompl::base::RealVectorStateSpace::deserialize(State *state, const void *serialization) const
+{
+    memcpy(state->as<StateType>()->values, serialization, stateBytes_);
+}
+
 double ompl::base::RealVectorStateSpace::distance(const State *state1, const State *state2) const
 {
     double dist = 0.0;
@@ -244,7 +259,7 @@ void ompl::base::RealVectorStateSpace::interpolate(const State *from, const Stat
         rstate->values[i] = rfrom->values[i] + (rto->values[i] - rfrom->values[i]) * t;
 }
 
-ompl::base::StateSamplerPtr ompl::base::RealVectorStateSpace::allocStateSampler(void) const
+ompl::base::StateSamplerPtr ompl::base::RealVectorStateSpace::allocDefaultStateSampler(void) const
 {
     return StateSamplerPtr(new RealVectorStateSampler(this));
 }

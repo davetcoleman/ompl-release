@@ -69,7 +69,7 @@ class Environment(object):
             result = result + ''.join([self.char_mapping[c] for c in line]) + '\n'
         return result
 
-def isValid(grid, spaceinformation, state):
+def isValid(grid, state):
     # planning is done in a continuous space, but our collision space
     # representation is discrete
     x = int(state[0])
@@ -106,7 +106,7 @@ class mySpaceInformation(ob.SpaceInformation):
 
         self.sMan.setBounds(sbounds)
         self.setStateValidityCheckingResolution(0.5)
-        isValidFn = partial(isValid, env.grid)
+        isValidFn = ob.StateValidityCheckerFn(partial(isValid, env.grid))
         self.setStateValidityChecker(isValidFn)
         self.setup()
 
@@ -203,9 +203,9 @@ class SBLTest(TestPlanner):
     def newplanner(self, si):
         planner = og.SBL(si)
         planner.setRange(10.0)
-        projection = ob.vectorUint()
+        projection = ou.vectorUint()
         projection.extend([0, 1])
-        cdim = ob.vectorDouble()
+        cdim = ou.vectorDouble()
         cdim.extend([1, 1])
         proj = ob.RealVectorOrthogonalProjectionEvaluator(si.getStateSpace(), cdim, projection)
         planner.setProjectionEvaluator(proj)
@@ -216,9 +216,9 @@ class pSBLTest(TestPlanner):
         planner = og.pSBL(si)
         planner.setRange(10.0)
         planner.setThreadCount(4)
-        projection = ob.vectorUint()
+        projection = ou.vectorUint()
         projection.extend([0, 1])
-        cdim = ob.vectorDouble()
+        cdim = ou.vectorDouble()
         cdim.extend([1, 1])
         proj = ob.RealVectorOrthogonalProjectionEvaluator(si.getStateSpace(), cdim, projection)
         planner.setProjectionEvaluator(proj)
@@ -228,9 +228,9 @@ class KPIECE1Test(TestPlanner):
     def newplanner(self, si):
         planner = og.KPIECE1(si)
         planner.setRange(10.0)
-        projection = ob.vectorUint()
+        projection = ou.vectorUint()
         projection.extend([0, 1])
-        cdim = ob.vectorDouble()
+        cdim = ou.vectorDouble()
         cdim.extend([1, 1])
         proj = ob.RealVectorOrthogonalProjectionEvaluator(si.getStateSpace(), cdim, projection)
         planner.setProjectionEvaluator(proj)
@@ -240,9 +240,9 @@ class LBKPIECE1Test(TestPlanner):
     def newplanner(self, si):
         planner = og.LBKPIECE1(si)
         planner.setRange(10.0)
-        projection = ob.vectorUint()
+        projection = ou.vectorUint()
         projection.extend([0, 1])
-        cdim = ob.vectorDouble()
+        cdim = ou.vectorDouble()
         cdim.extend([1, 1])
         proj = ob.RealVectorOrthogonalProjectionEvaluator(si.getStateSpace(), cdim, projection)
         planner.setProjectionEvaluator(proj)
@@ -252,9 +252,9 @@ class ESTTest(TestPlanner):
     def newplanner(self, si):
         planner = og.EST(si)
         planner.setRange(10.0)
-        projection = ob.vectorUint()
+        projection = ou.vectorUint()
         projection.extend([0, 1])
-        cdim = ob.vectorDouble()
+        cdim = ou.vectorDouble()
         cdim.extend([1, 1])
         proj = ob.RealVectorOrthogonalProjectionEvaluator(si.getStateSpace(), cdim, projection)
         planner.setProjectionEvaluator(proj)

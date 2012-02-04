@@ -41,13 +41,16 @@
 #include "ompl/base/ProblemDefinition.h"
 #include "ompl/base/PlannerData.h"
 #include "ompl/base/PlannerTerminationCondition.h"
+#include "ompl/base/GenericParam.h"
 #include "ompl/util/Console.h"
 #include "ompl/util/Time.h"
 #include "ompl/util/ClassForward.h"
 #include <boost/function.hpp>
 #include <boost/concept_check.hpp>
 #include <boost/noncopyable.hpp>
+#include <boost/lexical_cast.hpp>
 #include <string>
+#include <map>
 
 namespace ompl
 {
@@ -55,8 +58,10 @@ namespace ompl
     namespace base
     {
 
+        /// @cond IGNORE
         /** \brief Forward declaration of ompl::base::Planner */
         ClassForward(Planner);
+        /// @endcond
 
         /** \class ompl::base::PlannerPtr
             \brief A boost shared pointer wrapper for ompl::base::Planner */
@@ -197,8 +202,7 @@ namespace ompl
         /** \brief Properties that planners may have */
         struct PlannerSpecs
         {
-            PlannerSpecs(void) : recognizedGoal(GOAL_ANY), multithreaded(false), approximateSolutions(false),
-                                 optimizingPaths(false), estimatingProbabilities(false)
+            PlannerSpecs(void) : recognizedGoal(GOAL_ANY), multithreaded(false), approximateSolutions(false), optimizingPaths(false)
             {
             }
 
@@ -214,9 +218,6 @@ namespace ompl
             /** \brief Flag indicating whether the planner attempts to optimize the path and reduce its length until the
                 maximum path length specified by the goal representation is satisfied */
             bool     optimizingPaths;
-
-            /** \brief Flag indicating whether probabilities of success are computed by the planner */
-            bool     estimatingProbabilities;
         };
 
         /** \brief Base class for a planner */
@@ -328,7 +329,39 @@ namespace ompl
             /** \brief Check if setup() was called for this planner */
             bool isSetup(void) const;
 
+            /** \brief Get the  parameters for this planner */
+            ParamSet& params(void)
+            {
+                return params_;
+            }
+
+            /** \brief Get the  parameters for this planner */
+            const ParamSet& params(void) const
+            {
+                return params_;
+            }
+
+            /** \brief Print properties of the motion planner */
+            virtual void printProperties(std::ostream &out) const;
+
+            /** \brief Print information about the motion planner's settings */
+            virtual void printSettings(std::ostream &out) const;
+
         protected:
+
+            /** \brief This function declares a parameter for this planner instance, and specifies the setter and getter functions. */
+            template<typename T, typename PlannerType, typename SetterType, typename GetterType>
+            void declareParam(const std::string &name, const PlannerType &planner, const SetterType& setter, const GetterType& getter)
+            {
+                params_.declareParam<T>(name, msg_, boost::bind(setter, planner, _1), boost::bind(getter, planner));
+            }
+
+            /** \brief This function declares a parameter for this planner instance, and specifies the setter function. */
+            template<typename T, typename PlannerType, typename SetterType>
+            void declareParam(const std::string &name, const PlannerType &planner, const SetterType& setter)
+            {
+                params_.declareParam<T>(name, msg_, boost::bind(setter, planner, _1));
+            }
 
             /** \brief The space information for which planning is done */
             SpaceInformationPtr  si_;
@@ -345,6 +378,9 @@ namespace ompl
             /** \brief The specifications of the planner (its capabilities) */
             PlannerSpecs         specs_;
 
+            /** \brief A map from parameter names to parameter instances for this planner. This field is populated by the declareParam() function */
+            ParamSet             params_;
+
             /** \brief Flag indicating whether setup() has been called */
             bool                 setup_;
 
@@ -353,7 +389,7 @@ namespace ompl
         };
 
         /** \brief Definition of a function that can allocate a planner */
-        typedef boost::function1<PlannerPtr, const SpaceInformationPtr&> PlannerAllocator;
+        typedef boost::function<PlannerPtr(const SpaceInformationPtr&)> PlannerAllocator;
     }
 }
 

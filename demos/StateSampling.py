@@ -37,6 +37,7 @@
 # Author: Mark Moll
 
 try:
+    from ompl import util as ou
     from ompl import base as ob
     from ompl import geometric as og
 except:
@@ -45,6 +46,7 @@ except:
     from os.path import basename, abspath, dirname, join
     import sys
     sys.path.insert(0, join(dirname(dirname(abspath(__file__))),'py-bindings'))
+    from ompl import util as ou
     from ompl import base as ob
     from ompl import geometric as og
 from time import sleep
@@ -59,16 +61,16 @@ from math import fabs
 # efficient than generating random samples from the entire state space and
 # checking for validity.
 class MyValidStateSampler(ob.ValidStateSampler):
-    def __init__(si):
+    def __init__(self, si):
         super(MyValidStateSampler, self).__init__(si)
         self.name_ = "my sampler"
-        self.rng_ = RNG()
+        self.rng_ = ou.RNG()
 
     # Generate a sample in the valid part of the R^3 state space.
-    # Valid states satisfy the following constraints: 
+    # Valid states satisfy the following constraints:
     # -1<= x,y,z <=1
     # if .25 <= z <= .5, then |x|>.8 and |y|>.8
-    def sample(state):
+    def sample(self, state):
         z = self.rng_.uniformReal(-1,1)
 
         if z>.25 and z<.5:
@@ -97,12 +99,12 @@ class MyValidStateSampler(ob.ValidStateSampler):
 
 # This function is needed, even when we can write a sampler like the one
 # above, because we need to check path segments for validity
-def isStateValid(spaceInformation, state):
+def isStateValid(state):
     # Let's pretend that the validity check is computationally relatively
     # expensive to emphasize the benefit of explicitly generating valid
     # samples
     sleep(.001)
-    # Valid states satisfy the following constraints: 
+    # Valid states satisfy the following constraints:
     # -1<= x,y,z <=1
     # if .25 <= z <= .5, then |x|>.8 and |y|>.8
     return not (fabs(state[0]<.8) and fabs(state[1]<.8) and
@@ -110,13 +112,13 @@ def isStateValid(spaceInformation, state):
 
 # return an obstacle-based sampler
 def allocOBValidStateSampler(si):
-    # we can perform any additional setup / configuration of a sampler here, 
+    # we can perform any additional setup / configuration of a sampler here,
     # but there is nothing to tweak in case of the ObstacleBasedValidStateSampler.
-    return ob.ValidStateSamplerPtr(ob.ObstacleBasedValidStateSampler(si))
+    return ob.ObstacleBasedValidStateSampler(si)
 
 # return an instance of my sampler
 def allocMyValidStateSampler(si):
-    return ob.ValidStateSamplerPtr(MyValidStateSampler(si))
+    return MyValidStateSampler(si)
 
 def plan(samplerIndex):
     # construct the state space we are planning in
@@ -132,7 +134,7 @@ def plan(samplerIndex):
     ss = og.SimpleSetup(space)
 
     # set state validity checking for this space
-    ss.setStateValidityChecker(isStateValid)
+    ss.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
 
     # create a start state
     start = ob.State(space)
@@ -150,16 +152,16 @@ def plan(samplerIndex):
     ss.setStartAndGoalStates(start, goal)
 
     # set sampler (optional; the default is uniform sampling)
+    si = ss.getSpaceInformation()
     if samplerIndex==1:
         # use obstacle-based sampling
-        ss.getSpaceInformation().setValidStateSamplerAllocator(allocOBValidStateSampler)
+        si.setValidStateSamplerAllocator(ob.ValidStateSamplerAllocator(allocOBValidStateSampler))
     elif samplerIndex==2:
         # use my sampler
-        ss.getSpaceInformation().setValidStateSamplerAllocator(allocMyValidStateSampler)
+        si.setValidStateSamplerAllocator(ob.ValidStateSamplerAllocator(allocMyValidStateSampler))
 
-    # set the planner (optional)
     # create a planner for the defined space
-    planner = og.RRTConnect(ss.getSpaceInformation())
+    planner = og.PRM(si)
     ss.setPlanner(planner)
 
     # attempt to solve the problem within ten seconds of planning time
@@ -167,7 +169,6 @@ def plan(samplerIndex):
     if (solved):
         print "Found solution:"
         # print the path to screen
-        ss.simplifySolution()
         print ss.getSolutionPath()
     else:
         print "No solution found"

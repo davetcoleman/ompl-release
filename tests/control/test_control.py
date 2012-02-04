@@ -70,7 +70,7 @@ class Environment(object):
             result = result + ''.join([self.char_mapping[c] for c in line]) + '\n'
         return result
 
-def isValid(grid, spaceinformation, state):
+def isValid(grid, state):
     # planning is done in a continuous space, but our collision space
     # representation is discrete
     x = int(state[0])
@@ -112,9 +112,9 @@ class TestPlanner(object):
         # since sampling is continuous and we round down, we allow values until
         # just under the max limit
         # the resolution is 1.0 since we check cells only
-        sbounds.low = ob.vectorDouble()
+        sbounds.low = ou.vectorDouble()
         sbounds.low.extend([0.0, 0.0, -MAX_VELOCITY, -MAX_VELOCITY])
-        sbounds.high = ob.vectorDouble()
+        sbounds.high = ou.vectorDouble()
         sbounds.high.extend([float(env.width) - 0.000000001,
             float(env.height) - 0.000000001,
             MAX_VELOCITY, MAX_VELOCITY])
@@ -129,7 +129,7 @@ class TestPlanner(object):
         cSpace.setBounds(cbounds)
 
         ss = oc.SimpleSetup(cSpace)
-        isValidFn = partial(isValid, env.grid)
+        isValidFn = ob.StateValidityCheckerFn(partial(isValid, env.grid))
         ss.setStateValidityChecker(isValidFn)
         propagator = MyStatePropagator(ss.getSpaceInformation())
         ss.setStatePropagator(propagator)
@@ -189,9 +189,14 @@ class RRTTest(TestPlanner):
         planner = oc.RRT(si)
         return planner
 
-class myProjectionEvaluator(ob.ProjectionEvaluator):
+class ESTTest(TestPlanner):
+    def newplanner(self, si):
+        planner = oc.EST(si)
+        return planner
+
+class MyProjectionEvaluator(ob.ProjectionEvaluator):
     def __init__(self, space, cellSizes):
-        super(myProjectionEvaluator, self).__init__(space)
+        super(MyProjectionEvaluator, self).__init__(space)
         self.setCellSizes(cellSizes)
 
     def getDimension(self):
@@ -205,9 +210,9 @@ class myProjectionEvaluator(ob.ProjectionEvaluator):
 class KPIECE1Test(TestPlanner):
     def newplanner(self, si):
         planner = oc.KPIECE1(si)
-        cdim = ob.vectorDouble()
+        cdim = ou.vectorDouble()
         cdim.extend([1, 1])
-        ope = myProjectionEvaluator(si.getStateSpace(), cdim)
+        ope = MyProjectionEvaluator(si.getStateSpace(), cdim)
         planner.setProjectionEvaluator(ope)
         return planner
 
@@ -241,6 +246,13 @@ class PlanTest(unittest.TestCase):
 
     def testControl_RRT(self):
         planner = RRTTest()
+        (success, avgruntime, avglength) = self.runPlanTest(planner)
+        self.assertTrue(success >= 99.0)
+        self.assertTrue(avgruntime < 5)
+        self.assertTrue(avglength < 100.0)
+
+    def testControl_EST(self):
+        planner = ESTTest()
         (success, avgruntime, avglength) = self.runPlanTest(planner)
         self.assertTrue(success >= 99.0)
         self.assertTrue(avgruntime < 5)

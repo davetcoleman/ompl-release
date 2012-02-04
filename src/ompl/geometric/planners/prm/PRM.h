@@ -129,7 +129,7 @@ namespace ompl
              * @note Can't use the prefered boost::function syntax here because
              * the Python bindings don't like it.
              */
-            typedef boost::function1<std::vector<Vertex>&, const Vertex>
+            typedef boost::function<std::vector<Vertex>&(const Vertex)>
                 ConnectionStrategy;
 
             /** @brief A function that can reject connections.
@@ -137,15 +137,12 @@ namespace ompl
              This is called after previous connections from the neighbor list
              have been added to the roadmap.
              */
-            typedef boost::function2<bool, const Vertex&, const Vertex&> ConnectionFilter;
+            typedef boost::function<bool(const Vertex&, const Vertex&)> ConnectionFilter;
 
             /** \brief Constructor */
             PRM(const base::SpaceInformationPtr &si, bool starStrategy = false);
 
-            virtual ~PRM(void)
-            {
-                freeMemory();
-            }
+            virtual ~PRM(void);
 
             virtual void setProblemDefinition(const base::ProblemDefinitionPtr &pdef);
 
@@ -247,7 +244,7 @@ namespace ompl
             void freeMemory(void);
 
             /** \brief Construct a milestone for a given state (\e state) and store it in the nearest neighbors data structure */
-            Vertex addMilestone(base::State *state);
+            virtual Vertex addMilestone(base::State *state);
 
             /** \brief Make two milestones (\e m1 and \e m2) be part of the same connected component. The component with fewer elements will get the id of the component with more elements. */
             void uniteComponents(Vertex m1, Vertex m2);
@@ -264,7 +261,7 @@ namespace ompl
             bool haveSolution(const std::vector<Vertex> &start, const std::vector<Vertex> &goal, std::pair<Vertex, Vertex> *endpoints = NULL);
 
             /** \brief Given two milestones from the same connected component, construct a path connecting them and set it as the solution */
-            base::PathPtr constructSolution(const Vertex start, const Vertex goal);
+            virtual base::PathPtr constructSolution(const Vertex start, const Vertex goal);
 
             /** \brief Flag indicating whether the default strategy is the Star trategy or not */
             bool                                                   starStrategy_;

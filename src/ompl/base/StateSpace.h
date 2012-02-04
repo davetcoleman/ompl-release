@@ -41,6 +41,7 @@
 #include "ompl/base/StateSpaceTypes.h"
 #include "ompl/base/StateSampler.h"
 #include "ompl/base/ProjectionEvaluator.h"
+#include "ompl/base/GenericParam.h"
 #include "ompl/util/Console.h"
 #include "ompl/util/ClassForward.h"
 #include <boost/concept_check.hpp>
@@ -55,8 +56,10 @@ namespace ompl
     namespace base
     {
 
+        /// @cond IGNORE
         /** \brief Forward declaration of ompl::base::StateSpace */
         ClassForward(StateSpace);
+        /// @endcond
 
         /** \class ompl::base::StateSpacePtr
             \brief A boost shared pointer wrapper for ompl::base::StateSpace */
@@ -99,6 +102,35 @@ namespace ompl
                 return static_cast<const T*>(this);
             }
 
+            /** \brief Representation of the address of a value in a state. This structure stores the indexing information needed to access elements of a state (no pointer values are stored) */
+            struct ValueLocation
+            {
+                /** \brief In a complex state space there may be multiple
+                    compound state spaces that make up an even larger
+                    compound space.  This array indicates the sequence of
+                    indices of the subspaces that need to be followed to
+                    get to the component of the state that is of interest. */
+                std::vector<std::size_t> chain;
+
+                /** \brief The space that is reached if the chain above is followed on the state space */
+                const base::StateSpace  *space;
+
+                /** \brief The index of the value to be accessed, within the space above */
+                std::size_t              index;
+            };
+
+            /** \brief Flags to use in a bit mask for state space sanity checks */
+            enum SanityChecks
+                {
+                    STATESPACE_DISTANCE_TO_SELF          = (1<<0),
+                    STATESPACE_EQUAL_TO_SELF             = (1<<1),
+                    STATESPACE_DISTANCE_POSITIVE         = (1<<2),
+                    STATESPACE_DISTANCE_DIFFERENT_STATES = (1<<3),
+                    STATESPACE_DISTANCE_SYMMETRIC        = (1<<4),
+                    STATESPACE_INTERPOLATION             = (1<<5),
+                    STATESPACE_TRIANGLE_INEQUALITY       = (1<<6)
+                };
+
             /** @name Generic functionality for state spaces
                 @{ */
 
@@ -137,49 +169,17 @@ namespace ompl
                 in this one, or all of its subspaces are included in this one. */
             bool covers(const StateSpacePtr &other) const;
 
-            /** @} */
+            /** \brief Get the parameters for this space */
+            ParamSet& params(void)
+            {
+                return params_;
+            }
 
-            /** @name Functionality specific to state spaces (to be implemented by derived state spaces)
-                @{ */
-
-            /** \brief Get the dimension of the space (not the dimension of the surrounding ambient space) */
-            virtual unsigned int getDimension(void) const = 0;
-
-            /** \brief Get the maximum value a call to distance() can return (or an upper bound).
-                For unbounded state spaces, this function can return infinity.
-
-                \note Tight upper bounds are preferred because the value of the extent is used in
-                the automatic computation of parameters for planning. If the bounds are less tight,
-                the automatically computed parameters will be less useful.*/
-            virtual double getMaximumExtent(void) const = 0;
-
-            /** \brief Bring the state within the bounds of the state space. For unbounded spaces this
-                function can be a no-op. */
-            virtual void enforceBounds(State *state) const = 0;
-
-            /** \brief Check if a state is inside the bounding box. For unbounded spaces this function
-                can always return true. */
-            virtual bool satisfiesBounds(const State *state) const = 0;
-
-            /** \brief Copy a state to another. The memory of source and destination should NOT overlap. */
-            virtual void copyState(State *destination, const State *source) const = 0;
-
-            /** \brief Computes distance to between two states. This function satisfies the properties of a
-                metric and its return value will always be between 0 and getMaximumExtent() */
-            virtual double distance(const State *state1, const State *state2) const = 0;
-
-            /** \brief Many states contain a number of double values. This function provides a means to get the
-                memory address of a double value from state \e state located at position \e index. The first double value
-                is returned for \e index = 0. If \e index is too large (does not point to any double values in the state),
-                the return value is NULL.
-
-                \note This function does @b not map a state to an
-                array of doubles. There may be components of a state
-                that do not correspond to double values and they are
-                'invisible' to this function. Furthermore, this
-                function is slow and is not intended for use in the
-                implementation of planners. */
-            virtual double* getValueAddressAtIndex(State *state, const unsigned int index) const;
+            /** \brief Get the parameters for this space */
+            const ParamSet& params(void) const
+            {
+                return params_;
+            }
 
             /** \brief When performing discrete validation of motions,
                 the length of the longest segment that does not
@@ -214,6 +214,50 @@ namespace ompl
             /** \brief Get the value used to multiply the return value of validSegmentCount().*/
             unsigned int getValidSegmentCountFactor(void) const;
 
+            /** \brief Compute an array of ints that uniquely identifies the structure of the state space.
+                The first element of the signature is the number of integers that follow */
+            void computeSignature(std::vector<int> &signature) const;
+
+            /** @} */
+
+            /** @name Functionality specific to state spaces (to be implemented by derived state spaces)
+                @{ */
+
+            /** \brief Get the dimension of the space (not the dimension of the surrounding ambient space) */
+            virtual unsigned int getDimension(void) const = 0;
+
+            /** \brief Get the maximum value a call to distance() can return (or an upper bound).
+                For unbounded state spaces, this function can return infinity.
+
+                \note Tight upper bounds are preferred because the value of the extent is used in
+                the automatic computation of parameters for planning. If the bounds are less tight,
+                the automatically computed parameters will be less useful.*/
+            virtual double getMaximumExtent(void) const = 0;
+
+            /** \brief Bring the state within the bounds of the state space. For unbounded spaces this
+                function can be a no-op. */
+            virtual void enforceBounds(State *state) const = 0;
+
+            /** \brief Check if a state is inside the bounding box. For unbounded spaces this function
+                can always return true. */
+            virtual bool satisfiesBounds(const State *state) const = 0;
+
+            /** \brief Copy a state to another. The memory of source and destination should NOT overlap. */
+            virtual void copyState(State *destination, const State *source) const = 0;
+
+            /** \brief Computes distance to between two states. This function satisfies the properties of a
+                metric and its return value will always be between 0 and getMaximumExtent() */
+            virtual double distance(const State *state1, const State *state2) const = 0;
+
+            /** \brief Get the number of chars in the serialization of a state in this space */
+            virtual unsigned int getSerializationLength(void) const;
+
+            /** \brief Write the binary representation of \e state to \e serialization */
+            virtual void serialize(void *serialization, const State *state) const;
+
+            /** \brief Read the binary representation of a state from \e serialization and write it to \e state */
+            virtual void deserialize(State *state, const void *serialization) const;
+
             /** \brief Checks whether two states are equal */
             virtual bool equalStates(const State *state1, const State *state2) const = 0;
 
@@ -222,8 +266,19 @@ namespace ompl
                 @e from or @e to. */
             virtual void interpolate(const State *from, const State *to, const double t, State *state) const = 0;
 
-            /** \brief Allocate an instance of a uniform state sampler for this space */
-            virtual StateSamplerPtr allocStateSampler(void) const = 0;
+            /** \brief Allocate an instance of the default uniform state sampler for this space */
+            virtual StateSamplerPtr allocDefaultStateSampler(void) const = 0;
+
+            /** \brief Allocate an instance of the state sampler for this space. This sampler will be allocated with the
+                sampler allocator that was previously specified by setStateSamplerAllocator() or, if no sampler allocator was specified,
+                allocDefaultStateSampler() is called */
+            StateSamplerPtr allocStateSampler(void) const;
+
+            /** \brief Set the sampler allocator to use */
+            void setStateSamplerAllocator(const StateSamplerAllocator &ssa);
+
+            /** \brief Clear the state sampler allocator (reset to default) */
+            void clearStateSamplerAllocator(void);
 
             /** \brief Allocate a state that can store a point in the described space */
             virtual State* allocState(void) const = 0;
@@ -233,6 +288,53 @@ namespace ompl
 
             /** @} */
 
+            /** @name Functionality specific to accessing real values in a state
+                @{ */
+
+            /** \brief Many states contain a number of double values. This function provides a means to get the
+                memory address of a double value from state \e state located at position \e index. The first double value
+                is returned for \e index = 0. If \e index is too large (does not point to any double values in the state),
+                the return value is NULL.
+
+                \note This function does @b not map a state to an
+                array of doubles. There may be components of a state
+                that do not correspond to double values and they are
+                'invisible' to this function. Furthermore, this
+                function is @b slow and is not intended for use in the
+                implementation of planners. Ideally, state values should not be accessed by index. If accessing of individual state elements
+                is however needed, getValueAddressAtLocation() provides a faster implementation. */
+            virtual double* getValueAddressAtIndex(State *state, const unsigned int index) const;
+
+            /** \brief Const variant of the same function as above; */
+            const double* getValueAddressAtIndex(const State *state, const unsigned int index) const;
+
+            /** \brief Get the locations of values of type double contained in a state from this space. The order of the values is
+                consistent with getValueAddressAtIndex(). The setup() function must have been previously called. */
+            const std::vector<ValueLocation>& getValueLocations(void) const;
+
+            /** \brief Get the named locations of values of type double contained in a state from this space.
+                The setup() function must have been previously called. */
+            const std::map<std::string, ValueLocation>& getValueLocationsByName(void) const;
+
+            /** \brief Get a pointer to the double value in \e state that \e loc points to */
+            double* getValueAddressAtLocation(State *state, const ValueLocation &loc) const;
+
+            /** \brief Const variant of the same function as above; */
+            const double* getValueAddressAtLocation(const State *state, const ValueLocation &loc) const;
+
+            /** \brief Get a pointer to the double value in \e state that \e name points to */
+            double* getValueAddressAtName(State *state, const std::string &name) const;
+
+            /** \brief Const variant of the same function as above; */
+            const double* getValueAddressAtName(const State *state, const std::string &name) const;
+
+            /** \brief Copy all the real values from a state \e source to the array \e reals using getValueAddressAtLocation() */
+            void copyToReals(std::vector<double> &reals, const State *source) const;
+
+            /** \brief Copy the values from \e reals to the state \e destination using getValueAddressAtLocation() */
+            void copyFromReals(State *destination, const std::vector<double> &reals) const;
+
+            /** @} */
 
             /** @name Management of projections from this state space to Euclidean spaces
                 @{ */
@@ -277,19 +379,29 @@ namespace ompl
             virtual void printProjections(std::ostream &out) const;
 
             /** \brief Perform sanity checks for this state space. Throws an exception if failures are found.
-                \note This checks if distances are always positive, whether the integration works as expected. */
+                \note This checks if distances are always positive, whether the integration works as expected, etc. */
             virtual void sanityChecks(void) const;
+
+            /** \brief Convenience function that allows derived state spaces to choose which checks
+                should pass (see SanityChecks flags) and how strict the checks are. */
+            virtual void sanityChecks(double zero, double eps, unsigned int flags) const;
 
             /** \brief Print a Graphviz digraph that represents the containment diagram for all the instantiated state spaces */
             static void Diagram(std::ostream &out);
+
+            /** \brief Print the list of available state space instances */
+            static void List(std::ostream &out);
 
             /** @} */
 
             /** \brief Perform final setup steps. This function is
                 automatically called by the SpaceInformation. If any
                 default projections are to be registered, this call
-                will set them. It is safe to call this function
-                multiple times. */
+                will set them and call their setup() functions. It is
+                safe to call this function multiple times. At a
+                subsequent call, projections that have been previously
+                user configured are not re-instantiated, but their
+                setup() method is still called. */
             virtual void setup(void);
 
         protected:
@@ -299,6 +411,9 @@ namespace ompl
 
             /** \brief A type assigned for this state space */
             int                                           type_;
+
+            /** \brief An optional state sampler allocator */
+            StateSamplerAllocator                         ssa_;
 
             /** \brief The extent of this space at the time setup() was called */
             double                                        maxExtent_;
@@ -312,11 +427,22 @@ namespace ompl
             /** \brief The factor to multiply the value returned by validSegmentCount() */
             unsigned int                                  longestValidSegmentCountFactor_;
 
-            /** \brief Interface used for console output */
-            msg::Interface                                msg_;
-
             /** \brief List of available projections */
             std::map<std::string, ProjectionEvaluatorPtr> projections_;
+
+            /** \brief The set of parameters for this space */
+            ParamSet                                      params_;
+
+            /** \brief The value locations for all varliables of type double contained in a state;
+                The locations point to values in the same order as that returned by getValueAddressAtIndex() */
+            std::vector<ValueLocation>                    valueLocationsInOrder_;
+
+            /** \brief All the known value locations, by name. The names of state spaces access the first element of a state.
+                RealVectorStateSpace dimensions are used to access individual dimensions. */
+            std::map<std::string, ValueLocation>          valueLocationsByName_;
+
+            /** \brief Interface used for console output */
+            msg::Interface                                msg_;
 
         private:
 
@@ -371,7 +497,7 @@ namespace ompl
 
             /** \brief Adds a new state space as part of the compound state space. For computing distances within the compound
                 state space, the weight of the component also needs to be specified. */
-            virtual void addSubSpace(const StateSpacePtr &component, double weight);
+            void addSubSpace(const StateSpacePtr &component, double weight);
 
             /** \brief Get the number of state spaces that make up the compound state space */
             unsigned int getSubSpaceCount(void) const;
@@ -411,6 +537,12 @@ namespace ompl
                 as components. */
             bool isLocked(void) const;
 
+            /** \brief Lock this state space. This means no further
+                spaces can be added as components.  This function can
+                be for instance called from the constructor of a
+                state space that inherits from CompoundStateSpace to
+                prevent the user to add further components. */
+            void lock(void);
             /** @} */
 
             /** @name Functionality specific to the state space
@@ -425,6 +557,12 @@ namespace ompl
             virtual bool satisfiesBounds(const State *state) const;
 
             virtual void copyState(State *destination, const State *source) const;
+
+            virtual unsigned int getSerializationLength(void) const;
+
+            virtual void serialize(void *serialization, const State *state) const;
+
+            virtual void deserialize(State *state, const void *serialization) const;
 
             virtual double distance(const State *state1, const State *state2) const;
 
@@ -443,7 +581,7 @@ namespace ompl
 
             virtual void interpolate(const State *from, const State *to, const double t, State *state) const;
 
-            virtual StateSamplerPtr allocStateSampler(void) const;
+            virtual StateSamplerPtr allocDefaultStateSampler(void) const;
 
             virtual State* allocState(void) const;
 
@@ -458,13 +596,6 @@ namespace ompl
             virtual void printSettings(std::ostream &out) const;
 
             virtual void setup(void);
-
-            /** \brief Lock this state space. This means no further
-                spaces can be added as components.  This function can
-                be for instance called from the constructor of a
-                state space that inherits from CompoundStateSpace to
-                prevent the user to add further components. */
-            void lock(void);
 
         protected:
 

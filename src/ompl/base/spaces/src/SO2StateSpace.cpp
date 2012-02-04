@@ -92,6 +92,21 @@ void ompl::base::SO2StateSpace::copyState(State *destination, const State *sourc
     destination->as<StateType>()->value = source->as<StateType>()->value;
 }
 
+unsigned int ompl::base::SO2StateSpace::getSerializationLength(void) const
+{
+    return sizeof(double);
+}
+
+void ompl::base::SO2StateSpace::serialize(void *serialization, const State *state) const
+{
+    memcpy(serialization, &state->as<StateType>()->value, sizeof(double));
+}
+
+void ompl::base::SO2StateSpace::deserialize(State *state, const void *serialization) const
+{
+    memcpy(&state->as<StateType>()->value, serialization, sizeof(double));
+}
+
 double ompl::base::SO2StateSpace::distance(const State *state1, const State *state2) const
 {
     // assuming the states 1 & 2 are within bounds
@@ -126,7 +141,7 @@ void ompl::base::SO2StateSpace::interpolate(const State *from, const State *to, 
     }
 }
 
-ompl::base::StateSamplerPtr ompl::base::SO2StateSpace::allocStateSampler(void) const
+ompl::base::StateSamplerPtr ompl::base::SO2StateSpace::allocDefaultStateSampler(void) const
 {
     return StateSamplerPtr(new SO2StateSampler(this));
 }

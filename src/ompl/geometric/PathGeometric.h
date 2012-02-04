@@ -67,6 +67,9 @@ namespace ompl
             /** \brief Construct a path instance from a single state */
             PathGeometric(const base::SpaceInformationPtr &si, const base::State *state);
 
+            /** \brief Construct a path instance from two states (thus making a segment) */
+            PathGeometric(const base::SpaceInformationPtr &si, const base::State *state1, const base::State *state2);
+
             virtual ~PathGeometric(void)
             {
                 freeMemory();
@@ -86,7 +89,7 @@ namespace ompl
                 path. */
             double smoothness(void) const;
 
-            /** \brief Compute the clearance of the end points along
+            /** \brief Compute the clearance of the way-points along
                 the path (no interpolation is performed). The clearance for the points is averaged. */
             double clearance(void) const;
 
@@ -124,6 +127,16 @@ namespace ompl
             /** \brief Reverse the path */
             void reverse(void);
 
+            /** \brief Compute the time parametrization for the states along this path
+                \param maxVel The maximum velocity to be attained
+                \param maxAcc The maximum acceleration of the system
+                \param times The time stamp (in seconds) for each of the states along the path. Starts at 0.0
+                \param maxSteps The maximum number of steps to run this algorithm for (the algorithm is iterative)
+
+                \note This method attempts to get to the maximum velocity as quickly as possible, while staying within
+                acceleration limits. */
+            void computeFastTimeParametrization(double maxVel, double maxAcc, std::vector<double> &times, unsigned int maxSteps = 10) const;
+
             /** \brief Overlay the path \e over on top of the current
                 path. States are added to the current path if needed
                 (by copying the last state).
@@ -154,6 +167,15 @@ namespace ompl
 
             /** \brief Set this path to a random valid segment. Sample \e attempts times for valid segments. Returns true on success.*/
             bool randomValid(unsigned int attempts);
+
+            /** \brief Keep the part of the path that is after \e state (getClosestIndex() is used to find out which way-point is closest to \e state) */
+            void keepAfter(const base::State *state);
+
+            /** \brief Keep the part of the path that is before \e state (getClosestIndex() is used to find out which way-point is closest to \e state) */
+            void keepBefore(const base::State *state);
+
+            /** \brief Get the index of the way-point along the path that is closest to \e state. Returns -1 for an empty path. */
+            int getClosestIndex(const base::State *state) const;
 
             /** \brief The list of states that make up the path */
             std::vector<base::State*> states;

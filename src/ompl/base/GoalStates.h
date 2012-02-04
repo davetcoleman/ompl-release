@@ -52,7 +52,7 @@ namespace ompl
         public:
 
             /** \brief Create a goal representation that is in fact a set of states  */
-            GoalStates(const SpaceInformationPtr &si) : GoalSampleableRegion(si), samplePosition(0)
+            GoalStates(const SpaceInformationPtr &si) : GoalSampleableRegion(si), samplePosition_(0)
             {
                 type_ = GOAL_STATES;
             }
@@ -77,18 +77,23 @@ namespace ompl
             virtual void clear(void);
 
             /** \brief Check if there are any states in this goal region */
-            bool hasStates(void) const
-            {
-                return !states.empty();
-            }
+            virtual bool hasStates(void) const;
+
+            /** \brief Return a pointer to the indexth state in the state list */
+            virtual const State* getState(unsigned int index) const;
+
+            /** \brief Return the number of valid goal states */
+            virtual std::size_t getStateCount(void) const;
+
+        protected:
 
             /** \brief The goal states. Only ones that are valid are considered by the motion planner. */
-            std::vector<State*> states;
+            std::vector<State*> states_;
 
         private:
 
             /** \brief The index of the next sample to be returned  */
-            mutable unsigned int samplePosition;
+            mutable unsigned int samplePosition_;
 
             /** \brief Free allocated memory */
             void freeMemory(void);

@@ -37,16 +37,21 @@
 #ifndef PY_BINDINGS_OMPL_PY_CONTROL_
 #define PY_BINDINGS_OMPL_PY_CONTROL_
 
-#include <vector>
+#include "ompl/control/ODESolver.h"
+#include "py_boost_function.hpp"
+
 
 namespace ompl
 {
     namespace control
     {
-        inline int dummyVecVecInt()
+// Boost.OdeInt needs Boost version >= 1.44
+#if BOOST_VERSION >= 104400
+        inline int dummyODESolverSize()
         {
-            return sizeof(std::vector<std::vector<int> >);
+            return sizeof(ODEBasicSolver<>) + sizeof(ODEErrorSolver<>) + sizeof(ODEAdaptiveSolver<>);
         }
+#endif
     }
 }
 

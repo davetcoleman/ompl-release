@@ -40,6 +40,19 @@
 #include <limits>
 #include <cassert>
 
+ompl::geometric::SBL::SBL(const base::SpaceInformationPtr &si) : base::Planner(si, "SBL")
+{
+    specs_.recognizedGoal = base::GOAL_SAMPLEABLE_REGION;
+    maxDistance_ = 0.0;
+
+    Planner::declareParam<double>("range", this, &SBL::setRange, &SBL::getRange);
+}
+
+ompl::geometric::SBL::~SBL(void)
+{
+    freeMemory();
+}
+
 void ompl::geometric::SBL::setup(void)
 {
     Planner::setup();
@@ -51,9 +64,9 @@ void ompl::geometric::SBL::setup(void)
     tGoal_.grid.setDimension(projectionEvaluator_->getDimension());
 }
 
-void ompl::geometric::SBL::freeGridMotions(Grid<MotionSet> &grid)
+void ompl::geometric::SBL::freeGridMotions(Grid<MotionInfo> &grid)
 {
-    for (Grid<MotionSet>::iterator it = grid.begin(); it != grid.end() ; ++it)
+    for (Grid<MotionInfo>::iterator it = grid.begin(); it != grid.end() ; ++it)
     {
         for (unsigned int i = 0 ; i < it->second->data.size() ; ++i)
         {
@@ -105,6 +118,7 @@ bool ompl::geometric::SBL::solve(const base::PlannerTerminationCondition &ptc)
     base::State *xstate = si_->allocState();
 
     bool      startTree = true;
+    bool         solved = false;
 
     while (ptc() == false)
     {
@@ -151,8 +165,8 @@ bool ompl::geometric::SBL::solve(const base::PlannerTerminationCondition &ptc)
             for (unsigned int i = 0 ; i < solution.size() ; ++i)
                 path->states.push_back(si_->cloneState(solution[i]->state));
 
-            goal->setDifference(0.0);
-            goal->setSolutionPath(base::PathPtr(path));
+            goal->addSolutionPath(base::PathPtr(path), false, 0.0);
+            solved = true;
             break;
         }
     }
@@ -162,14 +176,14 @@ bool ompl::geometric::SBL::solve(const base::PlannerTerminationCondition &ptc)
     msg_.inform("Created %u (%u start + %u goal) states in %u cells (%u start + %u goal)", tStart_.size + tGoal_.size, tStart_.size, tGoal_.size,
                  tStart_.grid.size() + tGoal_.grid.size(), tStart_.grid.size(), tGoal_.grid.size());
 
-    return goal->isAchieved();
+    return solved;
 }
 
 bool ompl::geometric::SBL::checkSolution(bool start, TreeData &tree, TreeData &otherTree, Motion *motion, std::vector<Motion*> &solution)
 {
-    Grid<MotionSet>::Coord coord;
+    Grid<MotionInfo>::Coord coord;
     projectionEvaluator_->computeCoordinates(motion->state, coord);
-    Grid<MotionSet>::Cell* cell = otherTree.grid.getCell(coord);
+    Grid<MotionInfo>::Cell* cell = otherTree.grid.getCell(coord);
 
     if (cell && !cell->data.empty())
     {
@@ -245,20 +259,7 @@ bool ompl::geometric::SBL::isPathValid(TreeData &tree, Motion *motion)
 
 ompl::geometric::SBL::Motion* ompl::geometric::SBL::selectMotion(TreeData &tree)
 {
-    double sum  = 0.0;
-    Grid<MotionSet>::Cell* cell = NULL;
-    double prob = rng_.uniform01() * (tree.grid.size() - 1);
-    for (Grid<MotionSet>::iterator it = tree.grid.begin(); it != tree.grid.end() ; ++it)
-    {
-        sum += (double)(tree.size - it->second->data.size()) / (double)tree.size;
-        if (prob < sum)
-        {
-            cell = it->second;
-            break;
-        }
-    }
-    if (!cell && tree.grid.size() > 0)
-        cell = tree.grid.begin()->second;
+    GridCell* cell = tree.pdf.sample(rng_.uniform01());
     return cell && !cell->data.empty() ? cell->data[rng_.uniformInt(0, cell->data.size() - 1)] : NULL;
 }
 
@@ -266,22 +267,29 @@ void ompl::geometric::SBL::removeMotion(TreeData &tree, Motion *motion)
 {
     /* remove from grid */
 
-    Grid<MotionSet>::Coord coord;
+    Grid<MotionInfo>::Coord coord;
     projectionEvaluator_->computeCoordinates(motion->state, coord);
-    Grid<MotionSet>::Cell* cell = tree.grid.getCell(coord);
+    Grid<MotionInfo>::Cell* cell = tree.grid.getCell(coord);
     if (cell)
     {
         for (unsigned int i = 0 ; i < cell->data.size(); ++i)
+        {
             if (cell->data[i] == motion)
             {
                 cell->data.erase(cell->data.begin() + i);
                 tree.size--;
                 break;
             }
+        }
         if (cell->data.empty())
         {
             tree.grid.remove(cell);
             tree.grid.destroyCell(cell);
+            tree.pdf.remove (cell->data.elem_);
+        }
+        else
+        {
+            tree.pdf.update(cell->data.elem_, 1.0/cell->data.size());
         }
     }
 
@@ -290,11 +298,13 @@ void ompl::geometric::SBL::removeMotion(TreeData &tree, Motion *motion)
     if (motion->parent)
     {
         for (unsigned int i = 0 ; i < motion->parent->children.size() ; ++i)
+        {
             if (motion->parent->children[i] == motion)
             {
                 motion->parent->children.erase(motion->parent->children.begin() + i);
                 break;
             }
+        }
     }
 
     /* remove children */
@@ -311,16 +321,20 @@ void ompl::geometric::SBL::removeMotion(TreeData &tree, Motion *motion)
 
 void ompl::geometric::SBL::addMotion(TreeData &tree, Motion *motion)
 {
-    Grid<MotionSet>::Coord coord;
+    Grid<MotionInfo>::Coord coord;
     projectionEvaluator_->computeCoordinates(motion->state, coord);
-    Grid<MotionSet>::Cell* cell = tree.grid.getCell(coord);
+    Grid<MotionInfo>::Cell* cell = tree.grid.getCell(coord);
     if (cell)
+    {
         cell->data.push_back(motion);
+        tree.pdf.update(cell->data.elem_, 1.0/cell->data.size());
+    }
     else
     {
         cell = tree.grid.createCell(coord);
         cell->data.push_back(motion);
         tree.grid.add(cell);
+        cell->data.elem_ = tree.pdf.add(cell, 1.0);
     }
     tree.size++;
 }
@@ -335,16 +349,18 @@ void ompl::geometric::SBL::clear(void)
 
     tStart_.grid.clear();
     tStart_.size = 0;
+    tStart_.pdf.clear();
 
     tGoal_.grid.clear();
     tGoal_.size = 0;
+    tGoal_.pdf.clear();
 }
 
 void ompl::geometric::SBL::getPlannerData(base::PlannerData &data) const
 {
     Planner::getPlannerData(data);
 
-    std::vector<MotionSet> motions;
+    std::vector<MotionInfo> motions;
     tStart_.grid.getContent(motions);
 
     for (unsigned int i = 0 ; i < motions.size() ; ++i)

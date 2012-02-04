@@ -37,7 +37,6 @@
 #include "ompl/base/Planner.h"
 #include "ompl/util/Exception.h"
 #include "ompl/base/GoalSampleableRegion.h"
-#include "ompl/base/GoalLazySamples.h"
 #include <boost/thread.hpp>
 
 ompl::base::Planner::Planner(const SpaceInformationPtr &si, const std::string &name) :
@@ -126,23 +125,32 @@ bool ompl::base::Planner::solve(const PlannerTerminationConditionFn &ptc, double
     return solve(PlannerThreadedTerminationCondition(ptc, checkInterval));
 }
 
-/// @cond IGNORE
-namespace ompl
-{
-    // return true if a certain point in time has passed
-    static bool timePassed(const time::point &endTime)
-    {
-        return time::now() > endTime;
-    }
-}
-/// @endcond
-
 bool ompl::base::Planner::solve(double solveTime)
 {
     if (solveTime < 1.0)
-        return solve(PlannerTerminationCondition(boost::bind(&timePassed, time::now() + time::seconds(solveTime))));
+        return solve(timedPlannerTerminationCondition(solveTime));
     else
-        return solve(PlannerThreadedTerminationCondition(boost::bind(&timePassed, time::now() + time::seconds(solveTime)), std::min(solveTime / 100.0, 0.1)));
+        return solve(timedPlannerTerminationCondition(solveTime, std::min(solveTime / 100.0, 0.1)));
+}
+
+void ompl::base::Planner::printProperties(std::ostream &out) const
+{
+    out << "Planner " + getName() + " specs:" << std::endl;
+    out << "Multithreaded:                 " << (getSpecs().multithreaded ? "Yes" : "No") << std::endl;
+    out << "Reports approximate solutions: " << (getSpecs().approximateSolutions ? "Yes" : "No") << std::endl;
+    out << "Can optimize solutions:        " << (getSpecs().optimizingPaths ? "Yes" : "No") << std::endl;
+    out << "Aware of the following parameters:";
+    std::vector<std::string> params;
+    params_.getParamNames(params);
+    for (unsigned int i = 0 ; i < params.size() ; ++i)
+        out << " " << params[i];
+    out << std::endl;
+}
+
+void ompl::base::Planner::printSettings(std::ostream &out) const
+{
+    out << "Declared parameters for planner " << getName() << ":" << std::endl;
+    params_.print(out);
 }
 
 void ompl::base::PlannerInputStates::clear(void)
@@ -267,7 +275,7 @@ const ompl::base::State* ompl::base::PlannerInputStates::nextGoal(const PlannerT
 
     if (goal)
     {
-        const GoalLazySamples *gls = dynamic_cast<const GoalLazySamples*>(goal);
+        time::point start_wait;
         bool first = true;
         bool attempt = true;
         while (attempt)
@@ -286,7 +294,14 @@ const ompl::base::State* ompl::base::PlannerInputStates::nextGoal(const PlannerT
                     bool bounds = si_->satisfiesBounds(tempState_);
                     bool valid = bounds ? si_->isValid(tempState_) : false;
                     if (bounds && valid)
+                    {
+                        if (!first) // if we waited, show how long
+                        {
+                            msg::Interface msg(planner_ ? planner_->getName() : "");
+                            msg.debug("Waited %lf seconds for the first goal sample.", time::seconds(time::now() - start_wait));
+                        }
                         return tempState_;
+                    }
                     else
                     {
                         msg::Interface msg(planner_ ? planner_->getName() : "");
@@ -296,11 +311,12 @@ const ompl::base::State* ompl::base::PlannerInputStates::nextGoal(const PlannerT
                 while (sampledGoalsCount_ < goal->maxSampleCount() && !ptc());
             }
 
-            if (gls && goal->canSample() && !ptc())
+            if (goal->canSample() && !ptc())
             {
                 if (first)
                 {
                     first = false;
+                    start_wait = time::now();
                     msg::Interface msg(planner_ ? planner_->getName() : "");
                     msg.debug("Waiting for goal region samples ...");
                 }

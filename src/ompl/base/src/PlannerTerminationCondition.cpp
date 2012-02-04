@@ -40,9 +40,9 @@
 #include <boost/lambda/bind.hpp>
 #include <utility>
 
-void ompl::base::PlannerTerminationCondition::terminate(bool flag)
+void ompl::base::PlannerTerminationCondition::terminate(void) const
 {
-    terminate_ = flag;
+    terminate_ = true;
 }
 
 bool ompl::base::PlannerTerminationCondition::eval(void) const
@@ -83,27 +83,18 @@ namespace ompl
 /// @endcond
 
 ompl::base::PlannerOrTerminationCondition::PlannerOrTerminationCondition(const PlannerTerminationCondition &c1, const PlannerTerminationCondition &c2) :
-    PlannerTerminationCondition(boost::bind(&plannerOrTerminationCondition, boost::cref(c1), boost::cref(c2)))
+    PlannerTerminationCondition(boost::bind(&plannerOrTerminationCondition, c1, c2))
 {
 }
 
 ompl::base::PlannerAndTerminationCondition::PlannerAndTerminationCondition(const PlannerTerminationCondition &c1, const PlannerTerminationCondition &c2) :
-    PlannerTerminationCondition(boost::bind(&plannerAndTerminationCondition, boost::cref(c1), boost::cref(c2)))
+    PlannerTerminationCondition(boost::bind(&plannerAndTerminationCondition, c1, c2))
 {
 }
 
 bool ompl::base::PlannerThreadedTerminationCondition::eval(void) const
 {
     return evalValue_;
-}
-
-void ompl::base::PlannerThreadedTerminationCondition::terminate(bool flag)
-{
-    PlannerTerminationCondition::terminate(flag);
-    if (terminate_)
-        stopEvalThread();
-    else
-        startEvalThread();
 }
 
 void ompl::base::PlannerThreadedTerminationCondition::startEvalThread(void)
@@ -155,4 +146,9 @@ void ompl::base::PlannerThreadedTerminationCondition::periodicEval(void)
 ompl::base::PlannerTerminationCondition ompl::base::timedPlannerTerminationCondition(double duration)
 {
     return PlannerTerminationCondition(boost::bind(&timePassed, time::now() + time::seconds(duration)));
+}
+
+ompl::base::PlannerThreadedTerminationCondition ompl::base::timedPlannerTerminationCondition(double duration, double interval)
+{
+    return PlannerThreadedTerminationCondition(boost::bind(&timePassed, time::now() + time::seconds(duration)), interval);
 }

@@ -47,6 +47,7 @@ ompl::base::SpaceInformation::SpaceInformation(const StateSpacePtr &space) :
 {
     if (!stateSpace_)
         throw Exception("Invalid space definition");
+    params_.include(stateSpace_->params());
 }
 
 void ompl::base::SpaceInformation::setup(void)
@@ -63,6 +64,9 @@ void ompl::base::SpaceInformation::setup(void)
     stateSpace_->setup();
     if (stateSpace_->getDimension() <= 0)
         throw Exception("The dimension of the state space we plan in must be > 0");
+
+    params_.clear();
+    params_.include(stateSpace_->params());
 
     setup_ = true;
 }
@@ -97,6 +101,18 @@ void ompl::base::SpaceInformation::setStateValidityChecker(const StateValidityCh
         throw Exception("Invalid function definition for state validity checking");
 
     setStateValidityChecker(StateValidityCheckerPtr(dynamic_cast<StateValidityChecker*>(new BoostFnStateValidityChecker(this, svc))));
+}
+
+void ompl::base::SpaceInformation::setValidStateSamplerAllocator(const ValidStateSamplerAllocator &vssa)
+{
+    vssa_ = vssa;
+    setup_ = false;
+}
+
+void ompl::base::SpaceInformation::clearValidStateSamplerAllocator(void)
+{
+    vssa_ = ValidStateSamplerAllocator();
+    setup_ = false;
 }
 
 unsigned int ompl::base::SpaceInformation::randomBounceMotion(const StateSamplerPtr &sss, const State *start, unsigned int steps, std::vector<State*> &states, bool alloc) const
@@ -298,6 +314,9 @@ ompl::base::ValidStateSamplerPtr ompl::base::SpaceInformation::allocValidStateSa
 
 double ompl::base::SpaceInformation::probabilityOfValidState(unsigned int attempts) const
 {
+    if (attempts == 0)
+        return 0.0;
+
     unsigned int valid = 0;
     unsigned int invalid = 0;
 
@@ -320,6 +339,10 @@ double ompl::base::SpaceInformation::probabilityOfValidState(unsigned int attemp
 
 double ompl::base::SpaceInformation::averageValidMotionLength(unsigned int attempts) const
 {
+    // take the square root here because we in fact have a nested for loop
+    // where each loop executes #attempts steps (the sample() function of the UniformValidStateSampler if a for loop too)
+    attempts = std::max((unsigned int)floor(sqrt((double)attempts) + 0.5), 2u);
+
     StateSamplerPtr ss = allocStateSampler();
     UniformValidStateSampler *uvss = new UniformValidStateSampler(this);
     uvss->setNrAttempts(attempts);
@@ -356,16 +379,24 @@ double ompl::base::SpaceInformation::averageValidMotionLength(unsigned int attem
 void ompl::base::SpaceInformation::printSettings(std::ostream &out) const
 {
     out << "Settings for the state space '" << stateSpace_->getName() << "'" << std::endl;
-    out << "  - dimension: " << stateSpace_->getDimension() << std::endl;
     out << "  - state validity check resolution: " << (getStateValidityCheckingResolution() * 100.0) << '%' << std::endl;
     out << "  - valid segment count factor: " << stateSpace_->getValidSegmentCountFactor() << std::endl;
     out << "  - state space:" << std::endl;
     stateSpace_->printSettings(out);
+    out << std::endl << "Declared parameters:" << std::endl;
+    params_.print(out);
 }
 
 void ompl::base::SpaceInformation::printProperties(std::ostream &out) const
 {
     out << "Properties of the state space '" << stateSpace_->getName() << "'" << std::endl;
+    out << "  - signature: ";
+    std::vector<int> sig;
+    stateSpace_->computeSignature(sig);
+    for (std::size_t i = 0 ; i < sig.size() ; ++i)
+        out << sig[i] << " ";
+    out << std::endl;
+    out << "  - dimension: " << stateSpace_->getDimension() << std::endl;
     out << "  - extent: " << stateSpace_->getMaximumExtent() << std::endl;
     if (isSetup())
     {

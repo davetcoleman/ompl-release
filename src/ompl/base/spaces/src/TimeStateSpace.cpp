@@ -106,6 +106,21 @@ void ompl::base::TimeStateSpace::copyState(State *destination, const State *sour
     destination->as<StateType>()->position = source->as<StateType>()->position;
 }
 
+unsigned int ompl::base::TimeStateSpace::getSerializationLength(void) const
+{
+    return sizeof(double);
+}
+
+void ompl::base::TimeStateSpace::serialize(void *serialization, const State *state) const
+{
+    memcpy(serialization, &state->as<StateType>()->position, sizeof(double));
+}
+
+void ompl::base::TimeStateSpace::deserialize(State *state, const void *serialization) const
+{
+    memcpy(&state->as<StateType>()->position, serialization, sizeof(double));
+}
+
 double ompl::base::TimeStateSpace::distance(const State *state1, const State *state2) const
 {
     return fabs(state1->as<StateType>()->position - state2->as<StateType>()->position);
@@ -122,7 +137,7 @@ void ompl::base::TimeStateSpace::interpolate(const State *from, const State *to,
         (to->as<StateType>()->position - from->as<StateType>()->position) * t;
 }
 
-ompl::base::StateSamplerPtr ompl::base::TimeStateSpace::allocStateSampler(void) const
+ompl::base::StateSamplerPtr ompl::base::TimeStateSpace::allocDefaultStateSampler(void) const
 {
     return StateSamplerPtr(new TimeStateSampler(this));
 }

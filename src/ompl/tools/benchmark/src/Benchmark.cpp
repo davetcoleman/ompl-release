@@ -37,6 +37,7 @@
 #include "ompl/tools/benchmark/Benchmark.h"
 #include "ompl/tools/benchmark/MachineSpecs.h"
 #include "ompl/util/Time.h"
+#include <boost/scoped_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/progress.hpp>
 #include <fstream>
@@ -68,12 +69,19 @@ namespace ompl
     {
     public:
 
-        RunPlanner(const Benchmark *benchmark) : benchmark_(benchmark), timeUsed_(0.0), memUsed_(0), crashed_(false)
+        RunPlanner(const Benchmark *benchmark, bool useThreads)
+            : benchmark_(benchmark), timeUsed_(0.0), memUsed_(0), crashed_(false), useThreads_(useThreads)
         {
         }
 
         void run(const base::PlannerPtr &planner, const machine::MemUsage_t memStart, const machine::MemUsage_t maxMem, const double maxTime)
         {
+            if (!useThreads_)
+            {
+                runThread(planner, memStart + maxMem, time::seconds(maxTime));
+                return;
+            }
+
             boost::thread t(boost::bind(&RunPlanner::runThread, this, planner, memStart + maxMem, time::seconds(maxTime)));
 
             // allow 25% more time than originally specified, in order to detect planner termination
@@ -144,7 +152,7 @@ namespace ompl
         double              timeUsed_;
         machine::MemUsage_t memUsed_;
         bool                crashed_;
-
+        bool                useThreads_;
         msg::Interface      msg_;
     };
 
@@ -200,6 +208,7 @@ bool ompl::Benchmark::saveResultsToStream(std::ostream &out) const
     out << exp_.seed << " is the random seed" << std::endl;
     out << exp_.maxTime << " seconds per run" << std::endl;
     out << exp_.maxMem << " MB per run" << std::endl;
+    out << exp_.runCount << " runs per planner" << std::endl;
     out << exp_.totalDuration << " seconds spent to collect the data" << std::endl;
     out << exp_.planners.size() << " planners" << std::endl;
 
@@ -259,13 +268,19 @@ bool ompl::Benchmark::saveResultsToStream(std::ostream &out) const
     return true;
 }
 
-void ompl::Benchmark::benchmark(double maxTime, double maxMem, unsigned int runCount, bool displayProgress)
+void ompl::Benchmark::benchmark(const Request &req)
 {
     // sanity checks
     if (gsetup_)
-        gsetup_->setup();
+    {
+        if (!gsetup_->getSpaceInformation()->isSetup())
+            gsetup_->getSpaceInformation()->setup();
+    }
     else
-        csetup_->setup();
+    {
+        if (!csetup_->getSpaceInformation()->isSetup())
+            csetup_->getSpaceInformation()->setup();
+    }
 
     if (!(gsetup_ ? gsetup_->getGoal() : csetup_->getGoal()))
     {
@@ -281,8 +296,9 @@ void ompl::Benchmark::benchmark(double maxTime, double maxMem, unsigned int runC
 
     status_.running = true;
     exp_.totalDuration = 0.0;
-    exp_.maxTime = maxTime;
-    exp_.maxMem = maxMem;
+    exp_.maxTime = req.maxTime;
+    exp_.maxMem = req.maxMem;
+    exp_.runCount = req.runCount;
     exp_.host = machine::getHostname();
     exp_.seed = RNG::getSeed();
 
@@ -313,37 +329,72 @@ void ompl::Benchmark::benchmark(double maxTime, double maxMem, unsigned int runC
         gsetup_->print(setupInfo);
     else
         csetup_->print(setupInfo);
+    setupInfo << std::endl << "Properties of benchmarked planners:" << std::endl;
+    for (unsigned int i = 0 ; i < planners_.size() ; ++i)
+        planners_[i]->printProperties(setupInfo);
     exp_.setupInfo = setupInfo.str();
 
     msg_.inform("Done saving information");
 
     msg_.inform("Beginning benchmark");
     msg::OutputHandler *oh = msg::getOutputHandler();
-    msg::OutputHandlerFile ohf(getConsoleFilename(exp_).c_str());
-    msg::useOutputHandler(&ohf);
+    boost::scoped_ptr<msg::OutputHandlerFile> ohf;
+    if (req.saveConsoleOutput)
+    {
+        ohf.reset(new msg::OutputHandlerFile(getConsoleFilename(exp_).c_str()));
+        msg::useOutputHandler(ohf.get());
+    }
+    else
+        msg::noOutputHandler();
     msg_.inform("Beginning benchmark");
 
-    boost::shared_ptr<boost::progress_display> progress;
-    if (displayProgress)
+    boost::scoped_ptr<boost::progress_display> progress;
+    if (req.displayProgress)
     {
-        std::cout << "Running experiment " << exp_.name << std::endl;
+        std::cout << "Running experiment " << exp_.name << "." << std::endl;
+        std::cout << "Each planner will be executed " << req.runCount << " times for at most " << req.maxTime << " seconds. Memory is limited at "
+                  << req.maxMem << "MB." << std::endl;
         progress.reset(new boost::progress_display(100, std::cout));
     }
 
     machine::MemUsage_t memStart = machine::getProcessMemoryUsage();
-    machine::MemUsage_t maxMemBytes = (machine::MemUsage_t)(maxMem * 1024 * 1024);
+    machine::MemUsage_t maxMemBytes = (machine::MemUsage_t)(req.maxMem * 1024 * 1024);
 
     for (unsigned int i = 0 ; i < planners_.size() ; ++i)
     {
         status_.activePlanner = exp_.planners[i].name;
+        // execute planner switch event, if set
+        try
+        {
+            if (plannerSwitch_)
+            {
+                msg_.inform("Executing planner-switch event for planner %s ...", status_.activePlanner.c_str());
+                plannerSwitch_(planners_[i]);
+                msg_.inform("Completed execution of planner-switch event");
+            }
+        }
+        catch(std::runtime_error &e)
+        {
+            std::stringstream es;
+            es << "There was an error executing the planner-switch event for planner " << status_.activePlanner << std::endl;
+            es << "*** " << e.what() << std::endl;
+            std::cerr << es.str();
+            msg_.error(es.str());
+        }
+        if (gsetup_)
+            gsetup_->setup();
+        else
+            csetup_->setup();
+        planners_[i]->params().getParams(exp_.planners[i].common);
+        planners_[i]->getSpaceInformation()->params().getParams(exp_.planners[i].common);
 
         // run the planner
-        for (unsigned int j = 0 ; j < runCount ; ++j)
+        for (unsigned int j = 0 ; j < req.runCount ; ++j)
         {
             status_.activeRun = j;
-            status_.progressPercentage = (double)(100 * (runCount * i + j)) / (double)(planners_.size() * runCount);
+            status_.progressPercentage = (double)(100 * (req.runCount * i + j)) / (double)(planners_.size() * req.runCount);
 
-            if (displayProgress)
+            if (req.displayProgress)
                 while (status_.progressPercentage > progress->count())
                     ++(*progress);
 
@@ -355,12 +406,12 @@ void ompl::Benchmark::benchmark(double maxTime, double maxMem, unsigned int runC
                 planners_[i]->clear();
                 if (gsetup_)
                 {
-                    gsetup_->getGoal()->clearSolutionPath();
+                    gsetup_->getGoal()->clearSolutionPaths();
                     gsetup_->getSpaceInformation()->getMotionValidator()->resetMotionCounter();
                 }
                 else
                 {
-                    csetup_->getGoal()->clearSolutionPath();
+                    csetup_->getGoal()->clearSolutionPaths();
                     csetup_->getSpaceInformation()->getMotionValidator()->resetMotionCounter();
                 }
             }
@@ -392,8 +443,8 @@ void ompl::Benchmark::benchmark(double maxTime, double maxMem, unsigned int runC
                 msg_.error(es.str());
             }
 
-            RunPlanner rp(this);
-            rp.run(planners_[i], memStart, maxMemBytes, maxTime);
+            RunPlanner rp(this, req.useThreads);
+            rp.run(planners_[i], memStart, maxMemBytes, req.maxTime);
             bool solved = gsetup_ ? gsetup_->haveSolutionPath() : csetup_->haveSolutionPath();
 
             // store results
@@ -502,7 +553,7 @@ void ompl::Benchmark::benchmark(double maxTime, double maxMem, unsigned int runC
 
     status_.running = false;
     status_.progressPercentage = 100.0;
-    if (displayProgress)
+    if (req.displayProgress)
     {
         while (status_.progressPercentage > progress->count())
             ++(*progress);

@@ -46,6 +46,7 @@
 #include <cassert>
 #include <utility>
 #include <cstdlib>
+#include <cmath>
 
 namespace ompl
 {
@@ -116,7 +117,7 @@ namespace ompl
             typedef typename Grid::Coord Coord;
 
             /** \brief The signature of a function that frees the memory for a motion */
-            typedef typename boost::function1<void, Motion*> FreeMotionFn;
+            typedef typename boost::function<void(Motion*)> FreeMotionFn;
 
             Discretization(const FreeMotionFn &freeMotion) : grid_(0), size_(0), iteration_(1), recentCell_(NULL),
                                                              freeMotion_(freeMotion)
@@ -170,12 +171,12 @@ namespace ompl
                 ++iteration_;
             }
 
-            std::size_t getMotionCount(void)
+            std::size_t getMotionCount(void) const
             {
                 return size_;
             }
 
-            std::size_t getCellCount(void)
+            std::size_t getCellCount(void) const
             {
                 return grid_.size();
             }
