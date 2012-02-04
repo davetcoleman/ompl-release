@@ -1,5 +1,5 @@
 Catkin-ProjectName: ompl
-Version: 1670
+Version: 0.9.6
 
 Depends: cmake,
     libgtest-dev,
