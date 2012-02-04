@@ -1,0 +1,124 @@
+/** \page newPlanner Implementing a new motion planner
+
+    In order to implement a new motion planner the following rules
+    need to be followed:
+    - Define the new planner as a class that inherits from ompl::base::Planner
+    - Provide an implementation of ompl::base::Planner::solve(). We
+      suggest leveraging the implementations of the routines available
+      in ompl::base::SpaceInformation, but this is not required.
+    - If a solution is found, this function should return true and set
+      the found solution path in the goal instance contained by
+      ompl::base::ProblemDefinition. If no solution is found, the
+      function should return false.
+    - The function should terminate when a termination condition is met
+    - It is desirable that calling solve() multiple times
+      consecutively continues the solving process rather than
+      restarting it.
+    - Provide an implementation of ompl::base::Planner::clear(). The
+      state of the planner should be restored to what it was at
+      creation time.
+    - Provide an implementation of
+      ompl::base::Planner::getPlannerData(). The provided
+      implementation can be empty. This function is provided for
+      debugging purposes: it allows the user of the algorithm to
+      inspect the constructed exploration data structure.
+
+      \code
+      #include "ompl/base/Planner.h"
+
+      // often useful headers:
+      #include "ompl/util/RandomNumbers.h"
+      #include "ompl/tools/config/SelfConfig.h"
+
+      namespace ompl
+      {
+	  class myNewPlanner : public base::Planner
+	  {
+	  public:
+	      
+	      myNewPlanner(const base::SpaceInformationPtr &si) : base::Planner(si, "the planner's name")
+	      {
+		  // the specifications of this planner (ompl::base::PlannerSpecs)
+		  specs_.approximateSolutions = ...;
+		  specs_.recognizedGoal = ...;
+		  ...
+	      }
+	      
+	      virtual ~myNewPlanner(void)
+	      {
+		  // free any allocated memory
+	      }
+	      
+	      virtual bool solve(const base::PlannerTerminationCondition &ptc)
+	      {
+		  // make sure the planner is configured correctly; this makes sure there 
+		  // are input states and a goal is specified
+		  checkValidity();
+		  
+		  // get problem definition from pdef_
+		  base::Goal *goal = pdef_->getGoal().get();
+
+		  // get input states with pis_
+		  while (const base::State *st = pis_.nextStart())
+		  {
+		      // use start states
+		      // usually, copies of st should be made
+		  }
+
+		  // if needed, sample states from the goal region (and wait until a state is sampled)
+		  const base::State *st = pis_.nextGoal(ptc);
+		  // or sample a new goal state only if available:
+		  const base::State *st = pis_.nextGoal();
+
+		  // call routines from si_ as needed
+		  // periodically check if ptc() returns true.
+		  // if it does, terminate planning.
+		  // use msg_ to output messages.
+
+		  // compute a valid motion plan and set it in the goal
+		  pdef_->getGoal()->setSolutionPath(...);
+		  
+		  return pdef_->getGoal()->isAchieved();
+	      }
+	      
+	      virtual void clear(void)
+	      {
+		  Planner::clear();
+		  // clear the data structures
+	      }
+
+	      // optionally, if additional setup/configuration is needed, the setup() method can be implemented
+	      virtual void setup(void)
+	      {
+		  Planner::setup();
+
+		  // perhaps attempt some auto-configuration
+		  SelfConfig sc(si_, getName());
+		  sc.configure...
+	      }
+	      
+	      virtual void getPlannerData(base::PlannerData &data) const
+	      {
+		  // fill data with the states and edges that were created
+		  // in the exploration data structure
+		  // perhaps also fill control::PlannerData
+	      }
+	      
+	  };
+      }
+      \endcode
+
+    Testing a newly added planner:
+    - Basic test to ensure that the functionality of
+      ompl::base::Planner::clear() and ompl::base::Planner::solve() is
+      correct:
+      \code
+      // create a planning context such that planner->solve() can be called and expected to find a solution
+      base::PlannerPtr planner;    
+      // create a testing scenario for the planner
+      PlannerTest pt(planner);
+      pt.test();
+      \endcode
+    - Use the ompl::Benchmark class to evaluate performance
+
+*/
