@@ -231,9 +231,12 @@ namespace ompl
                 static const int    COVGRID_LENGTH              = 128;
                 static const int    NUM_REGION_EXPANSIONS       = 100;
                 static const int    NUM_TREE_SELECTIONS         = 50;
-                static const double PROB_ABANDON_LEAD_EARLY     = 0.25;
-                static const double PROB_KEEP_ADDING_TO_AVAIL   = 0.95;
-                static const double PROB_SHORTEST_PATH          = 0.95;
+                // C++ standard prohibits non-integral static const member initialization
+                // These constants are set in Syclop.cpp.  C++11 standard changes this
+                // with the constexpr keyword, but for compatibility this is not done.
+                static const double PROB_ABANDON_LEAD_EARLY     /*= 0.25*/;
+                static const double PROB_KEEP_ADDING_TO_AVAIL   /*= 0.95*/;
+                static const double PROB_SHORTEST_PATH          /*= 0.95*/;
             };
 
         protected:
@@ -324,8 +327,8 @@ namespace ompl
             };
             #pragma pack (pop) // Restoring default byte alignment
 
-            /** \brief Initialize the low-level tree rooted at State s, and return the Motion corresponding to s. */
-            virtual Motion* initializeTree(const base::State* s) = 0;
+            /** \brief Add State s as a new root in the low-level tree, and return the Motion corresponding to s. */
+            virtual Motion* addRoot(const base::State* s) = 0;
 
             /** \brief Select a Motion from the given Region, and extend the tree from the Motion.
                 Add any new motions created to newMotions. */
@@ -438,6 +441,41 @@ namespace ompl
             };
             /// @endcond
 
+            /// @cond IGNORE
+            class RegionSet
+            {
+            public:
+                int operator[](const unsigned int i) const
+                {
+                    return v[i];
+                }
+                int sampleUniform(void)
+                {
+                    if (empty())
+                        return -1;
+                    return v[rng.uniformInt(0, v.size()-1)];
+                }
+                void insert(const int r)
+                {
+                    if (s.insert(r).second)
+                        v.push_back(r);
+                }
+                void clear()
+                {
+                    s.clear();
+                    v.clear();
+                }
+                bool empty()
+                {
+                    return v.empty();
+                }
+            private:
+                RNG rng;
+                std::set<int> s;
+                std::vector<int> v;
+            };
+            /// @endcond
+
             /** \brief Initializes default values for a given Region. */
             void initRegion(Region& r);
 
@@ -468,10 +506,6 @@ namespace ompl
                 creating Region and Adjacency objects for each node and edge. */
             void buildGraph(void);
 
-            /** \brief Initialize default values for Region and Adjacency objects in the RegionGraph.
-                Initialize the low-level tree with the start state from the problem definition. */
-            void initGraph(void);
-
             /** \brief Clear all Region and Adjacency objects in the graph. */
             void clearGraphDetails(void);
 
@@ -495,6 +529,8 @@ namespace ompl
             bool graphReady_;
             boost::unordered_map<std::pair<int,int>, Adjacency*> regionsToEdge_;
             unsigned int numMotions_;
+            RegionSet startRegions_;
+            RegionSet goalRegions_;
         };
     }
 }
