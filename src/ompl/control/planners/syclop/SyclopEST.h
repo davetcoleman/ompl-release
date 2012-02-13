@@ -45,7 +45,9 @@ namespace ompl
 {
     namespace control
     {
-        /** \brief SyclopEST is Syclop with EST as its low-level tree planner. */
+        /** \brief SyclopEST is Syclop with EST as its low-level tree planner.
+            \anchor cSyclopEST
+        */
         class SyclopEST : public Syclop
         {
         public:
@@ -64,7 +66,7 @@ namespace ompl
             virtual void getPlannerData(base::PlannerData& data) const;
 
         protected:
-            virtual Syclop::Motion* initializeTree(const base::State* s);
+            virtual Syclop::Motion* addRoot(const base::State* s);
             virtual void selectAndExtend(Region& region, std::vector<Motion*>& newMotions);
 
             /** \brief Free the memory allocated by this planner. */
