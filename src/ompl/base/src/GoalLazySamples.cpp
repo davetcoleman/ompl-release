@@ -95,9 +95,9 @@ bool ompl::base::GoalLazySamples::isSampling(void) const
     return terminateSamplingThread_ == false && samplingThread_ != NULL;
 }
 
-bool ompl::base::GoalLazySamples::canSample(void) const
+bool ompl::base::GoalLazySamples::couldSample(void) const
 {
-    return maxSampleCount() > 0 || isSampling();
+    return canSample() || isSampling();
 }
 
 void ompl::base::GoalLazySamples::clear(void)
