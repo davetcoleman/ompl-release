@@ -15,6 +15,7 @@ export CMAKE_PREFIX_PATH=/opt/ros/fuerte
 #  https://code.ros.org/trac/ros/ticket/2977
 #  https://code.ros.org/trac/ros/ticket/3842
 export LDFLAGS=
+export PKG_CONFIG_PATH=/opt/ros/fuerte/lib/pkgconfig
 
 %:
 	dh  $@
@@ -31,4 +32,7 @@ override_dh_auto_configure:
 override_dh_auto_test:
 	echo -- Running tests. Even if one of them fails the build is not canceled.
 	dh_auto_test || true
+
+override_dh_shlibdeps:
+	dh_shlibdeps -l$(CURDIR)/debian/ros-fuerte-ompl//opt/ros/fuerte/lib/
 
