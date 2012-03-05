@@ -83,11 +83,8 @@ ompl::geometric::SimpleSetup::SimpleSetup(const base::StateSpacePtr &space) :
 
 void ompl::geometric::SimpleSetup::setup(void)
 {
-    if (!configured_)
+    if (!configured_ || !si_->isSetup() || !planner_->isSetup())
     {
-        if (!si_)
-            throw Exception("No space information defined");
-
         if (!si_->isSetup())
             si_->setup();
         if (!planner_)
