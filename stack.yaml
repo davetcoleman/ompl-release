@@ -3,7 +3,7 @@ Version: 0.10.2001843
 Release-Tag: 1843
 
 Depends: cmake,
-    test,
+    gtest,
     boost
 
 Description: OMPL is a free sampling-based motion planning library.
