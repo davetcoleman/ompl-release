@@ -1,5 +1,5 @@
 repo: acc0a7de5b906703869dd1e58b000b426d18be78
-node: 5451d2f2d52439a4be594dbc97ad3cd0be9ad20b
+node: eaf74a68d1f12290aee826c9276e43521fea0ed9
 branch: default
 latesttag: 0.10.2
-latesttagdistance: 60
+latesttagdistance: 61
