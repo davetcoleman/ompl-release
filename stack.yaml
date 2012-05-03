@@ -1,9 +1,8 @@
 Catkin-ProjectName: ompl
-Version: 0.10.2001896
-Release-Tag: 1896
+Version: 0.10.2001904
+Release-Tag: 1904
 
 Depends: cmake,
-    gtest,
     boost
 
 Description: OMPL is a free sampling-based motion planning library.
