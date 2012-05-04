@@ -41,6 +41,7 @@
 #include <vector>
 #include <map>
 #include "ompl/base/State.h"
+#include "ompl/base/SpaceInformation.h"
 #include "ompl/util/ClassForward.h"
 #include <boost/noncopyable.hpp>
 #include <boost/function.hpp>
@@ -142,7 +143,7 @@ namespace ompl
             /// \brief Representation of an invalid vertex index
             static const unsigned int      INVALID_INDEX;
 
-            PlannerData(void);
+            PlannerData(const SpaceInformationPtr &si);
             virtual ~PlannerData(void);
 
             /// \name PlannerData construction
@@ -270,14 +271,16 @@ namespace ompl
             /// \brief Returns a map of out-going edges from vertex with index \e v.
             /// Key = vertex index, value = edge structure.  The number of outgoing edges from \e v is returned
             unsigned int getEdges (unsigned int v, std::map<unsigned int, const PlannerDataEdge*> &edgeMap) const;
-            /// \brief Returns the weight of the edge between the given vertex indexes.
+            /// \brief Returns the weight of the edge between the given vertex indices.
             /// INVALID_WEIGHT is returned for a non-existant edge.
             double getEdgeWeight (unsigned int v1, unsigned int v2) const;
-            /// \brief Sets the weight of the edge between the given vertex indexess.
+            /// \brief Sets the weight of the edge between the given vertex indices.
             /// If an edge between v1 and v2 does not exist, false is returned.
             bool setEdgeWeight (unsigned int v1, unsigned int v2, double weight);
             /// \brief Computes the weight for all edges given the EdgeWeightFn \e f
-            void computeEdgeWeights(const EdgeWeightFn& f);
+            /// If \e f is not specified (i.e. NULL), ompl::base::PlannerData::defaultEdgeWeight
+            /// is used, which defines the weight as the distance between the states in the two vertices.
+            void computeEdgeWeights(const EdgeWeightFn& f = NULL);
 
             /// \}
             /// \name Output methods
@@ -291,6 +294,15 @@ namespace ompl
             /// \}
             /// \name Advanced graph extraction
             /// \{
+
+            /// \brief Extracts the minimum spanning tree of the data rooted at the vertex
+            /// with index \e v.  The minimum spanning tree is saved into \e mst.
+            /// O(|E| log |V|) complexity.
+            void extractMinimumSpanningTree (unsigned int v, PlannerData &mst) const;
+            /// \brief Extracts the subset of PlannerData reachable from the vertex with index
+            /// v.  For tree structures, this will be the sub-tree rooted at v. The reachable set
+            /// is saved into \e data.
+            void extractReachable(unsigned int v, PlannerData &data) const;
 
             /// \brief Extract a Boost.Graph object from this PlannerData.
             /// \remarks Use of this method requires inclusion of PlannerDataGraph.h  The
@@ -313,12 +325,17 @@ namespace ompl
             std::map<std::string, std::string>   properties;
 
         protected:
+            double defaultEdgeWeight(const PlannerDataVertex &v1, const PlannerDataVertex &v2, const PlannerDataEdge& e) const;
+
             /// \brief A mapping of states to vertex indexes.  For fast lookup of vertex index.
             std::map<const State*, unsigned int> stateIndexMap_;
             /// \brief A mutable listing of the vertices marked as start states.  Stored in sorted order.
             std::vector<unsigned int>            startVertexIndices_;
             /// \brief A mutable listing of the vertices marked as goal states.  Stored in sorted order.
             std::vector<unsigned int>            goalVertexIndices_;
+
+            /// \brief The space information instance for this data.
+            SpaceInformationPtr                  si_;
 
         private:
             // Abstract pointer that points to the Boost.Graph structure.
