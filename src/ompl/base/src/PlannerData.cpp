@@ -39,6 +39,7 @@
 
 #include <boost/graph/graphviz.hpp>
 #include <boost/graph/graphml.hpp>
+#include <boost/graph/prim_minimum_spanning_tree.hpp>
 
 // This is a convenient macro to cast the void* graph pointer as the
 // Boost.Graph structure from PlannerDataGraph.h
@@ -49,7 +50,7 @@ const ompl::base::PlannerDataVertex ompl::base::PlannerData::NO_VERTEX = ompl::b
 const double ompl::base::PlannerData::INVALID_WEIGHT = std::numeric_limits<double>::infinity();
 const unsigned int ompl::base::PlannerData::INVALID_INDEX = std::numeric_limits<unsigned int>::max();
 
-ompl::base::PlannerData::PlannerData (void)
+ompl::base::PlannerData::PlannerData (const SpaceInformationPtr &si) : si_(si)
 {
     graphRaw_ = new Graph();
 }
@@ -512,6 +513,11 @@ bool ompl::base::PlannerData::markGoalState (const base::State* st)
 
 void ompl::base::PlannerData::computeEdgeWeights(const ompl::base::PlannerData::EdgeWeightFn& f)
 {
+    // If f wasn't specified, use defaultEdgeWeight
+    ompl::base::PlannerData::EdgeWeightFn func = f;
+    if (!func)
+        func = boost::bind(&ompl::base::PlannerData::defaultEdgeWeight, this, _1, _2, _3);
+
     unsigned int nv = numVertices();
     for (unsigned int i = 0; i < nv; ++i)
     {
@@ -520,7 +526,64 @@ void ompl::base::PlannerData::computeEdgeWeights(const ompl::base::PlannerData::
 
         std::map<unsigned int, const PlannerDataEdge*>::const_iterator it;
         for (it = nbrs.begin(); it != nbrs.end(); ++it)
-            setEdgeWeight(i, it->first, f(getVertex(i), getVertex(it->first), *it->second));
+            setEdgeWeight(i, it->first, func(getVertex(i), getVertex(it->first), *it->second));
+    }
+}
+
+void ompl::base::PlannerData::extractMinimumSpanningTree (unsigned int v, base::PlannerData &mst) const
+{
+    std::vector<ompl::base::PlannerData::Graph::Vertex> pred(numVertices());
+
+    // Ask boost nicely for the minimum spanning tree
+    boost::prim_minimum_spanning_tree(*graph_, &pred[0], boost::weight_map(get(boost::edge_weight, *graph_)).
+                                                         vertex_index_map(get(boost::vertex_index, *graph_)).
+                                                         root_vertex(boost::vertex(v, *graph_)));
+
+    // Adding vertices to MST
+    for (std::size_t i = 0; i < pred.size(); ++i)
+    {
+        if (isStartVertex(i))
+            mst.addStartVertex(getVertex(i));
+        else if (isGoalVertex(i))
+            mst.addGoalVertex(getVertex(i));
+        else
+            mst.addVertex(getVertex(i));
+    }
+
+    // Adding edges to MST
+    for (std::size_t i = 0; i < pred.size(); ++i)
+    {
+        if (pred[i] != i)
+            mst.addEdge(pred[i], i, getEdge(pred[i], i), getEdgeWeight(pred[i], i));
+    }
+}
+
+void ompl::base::PlannerData::extractReachable(unsigned int v, base::PlannerData& data) const
+{
+    // If this vertex already exists in data, return
+    if (data.vertexExists(getVertex(v)))
+        return;
+
+    // Adding the vertex corresponding to v into data
+    unsigned int idx;
+    if (isStartVertex(v))
+        idx = data.addStartVertex(getVertex(v));
+    else if (isGoalVertex(v))
+        idx = data.addGoalVertex(getVertex(v));
+    else
+        idx = data.addVertex(getVertex(v));
+
+    assert (idx != INVALID_INDEX);
+
+    std::map<unsigned int, const PlannerDataEdge*> neighbors;
+    getEdges(v, neighbors);
+
+    // Depth-first traversal of reachable graph
+    std::map<unsigned int, const PlannerDataEdge*>::iterator it;
+    for (it = neighbors.begin(); it != neighbors.end(); ++it)
+    {
+        extractReachable(it->first, data);
+        data.addEdge(idx, data.vertexIndex(getVertex(it->first)), *(it->second), getEdgeWeight(v, it->first));
     }
 }
 
@@ -535,3 +598,9 @@ const ompl::base::PlannerData::Graph& ompl::base::PlannerData::toBoostGraph(void
     const ompl::base::PlannerData::Graph* boostgraph = reinterpret_cast<const ompl::base::PlannerData::Graph*>(graphRaw_);
     return *boostgraph;
 }
+
+double ompl::base::PlannerData::defaultEdgeWeight(const base::PlannerDataVertex &v1, const base::PlannerDataVertex &v2, const base::PlannerDataEdge& /*e*/) const
+{
+    return si_->distance(v1.getState(), v2.getState());
+}
+
