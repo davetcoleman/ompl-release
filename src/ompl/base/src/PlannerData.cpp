@@ -67,6 +67,12 @@ ompl::base::PlannerData::~PlannerData (void)
 
 void ompl::base::PlannerData::clear (void)
 {
+    // Freeing decoupled states, if any
+    for (std::set<State*>::iterator it = decoupledStates_.begin(); it != decoupledStates_.end(); ++it)
+    {
+        si_->freeState(*it);
+    }
+
     if (graph_)
     {
         std::pair<Graph::EIterator, Graph::EIterator> eiterators = boost::edges(*graph_);
@@ -80,6 +86,30 @@ void ompl::base::PlannerData::clear (void)
            delete vertices[*iter];
 
         graph_->clear();
+    }
+}
+
+void ompl::base::PlannerData::decoupleFromPlanner (void)
+{
+    unsigned int count = 0;
+    for (unsigned int i = 0; i < numVertices(); ++i)
+    {
+        PlannerDataVertex& vtx = getVertex(i);
+        // If this vertex's state is not in the decoupled list, clone it and add it
+        if (decoupledStates_.find(const_cast<State*>(vtx.getState())) == decoupledStates_.end())
+        {
+            const State* oldState = vtx.getState();
+            State* clone = si_->cloneState(oldState);
+            decoupledStates_.insert(clone);
+            // Replacing the shallow state pointer with our shiny new clone
+            vtx.state_ = clone;
+            
+            // Remove oldState from stateIndexMap
+            stateIndexMap_.erase(oldState);
+            // Add the new, cloned state to stateIndexMap
+            stateIndexMap_[clone] = i;
+            count++;
+        }
     }
 }
 
@@ -452,6 +482,14 @@ bool ompl::base::PlannerData::removeVertex (unsigned int vIndex)
         if (goalVertexIndices_[i] > vIndex)
             goalVertexIndices_[i]--;
 
+    // If the state attached to this vertex was decoupled, free it here
+    State* vtxState = const_cast<State*>(getVertex(vIndex).getState());
+    if (decoupledStates_.find(vtxState) != decoupledStates_.end())
+    {
+        decoupledStates_.erase(vtxState);
+        si_->freeState(vtxState);
+        vtxState = NULL;
+    }
 
     // Slay the vertex
     boost::clear_vertex(boost::vertex(vIndex, *graph_), *graph_);
