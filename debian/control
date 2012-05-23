@@ -2,12 +2,12 @@ Source: ros-fuerte-ompl
 Section: misc
 Priority: extra
 Maintainer: Ioan Sucan <isucan@willowgarage.com>
-Build-Depends: debhelper (>= 7.0.50~), cmake,libboost-all-dev
+Build-Depends: debhelper (>= 7.0.50~), libboost1.46-all-dev,cmake
 Homepage: http://ompl.kavrakilab.org
 Standards-Version: 3.9.2
 
 Package: ros-fuerte-ompl
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, cmake,libboost-all-dev
+Depends: ${shlibs:Depends}, ${misc:Depends}, libboost1.46-all-dev,cmake
 Description: OMPL is a free sampling-based motion planning library.
 
