@@ -132,6 +132,7 @@ void ompl::geometric::PRM::clearQuery(void)
 {
     startM_.clear();
     goalM_.clear();
+    pis_.restart();
 }
 
 void ompl::geometric::PRM::clear(void)
