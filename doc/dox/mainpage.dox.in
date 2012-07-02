@@ -30,11 +30,30 @@ OMPL is intended to be efficient, thread safe, easy to use, easily extensible
 and freely available (visit this project on <a
 href="https://bitbucket.org/ompl/ompl">Bitbucket</a>).
 
+\htmlonly
 <a href="download.html" class="btn btn-primary">Current version: @OMPL_VERSION@
-\htmlonly<br>\endhtmlonly
+<br>
 <small>Released: @OMPL_RELEASE_DATE@</small></a>
 
-\htmlonly
+<a data-toggle="modal" href="#citationModal" class="btn btn-primary btn-primary">Click for citation,<br><small>if you use OMPL in your work</small></a>
+<div id="citationModal" class="modal hide fade">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h3>OMPL Citation</h3>
+    </div>
+    <div class="modal-body">
+        <p>If you use OMPL in your research, we kindly ask you to include the following citation in your publications:
+        <ul>
+        <li> Ioan A. Șucan, Mark Moll, Lydia E. Kavraki, <i>The Open Motion Planning Library,</i> IEEE Robotics & Automation Magazine, 2012. To appear. <a href="http://ompl.kavrakilab.org">http://ompl.kavrakilab.org</a></li>
+        </ul>
+    </p>
+</div>
+<div class="modal-footer">
+    <a href="#" class="btn" data-dismiss="modal" >Close</a>
+</div>
+</div>
+</p>
+
 <div class="fb-like" data-href="http://www.facebook.com/pages/OMPL/320018418039567" data-send="true" data-layout="button_count" data-width="450" data-show-faces="false"></div>
 
 </div><div class="span6">
@@ -44,11 +63,10 @@ href="https://bitbucket.org/ompl/ompl">Bitbucket</a>).
       <div class="pagination-centered"><img src="../images/mp.jpg"></div>
       </div>
       <div class="item">
-      <img src="../images/mp.jpg" class="hidden" style="margin-top: 1px">
+        <img src="../images/mp.jpg" class="hidden" style="margin-top: 1px">
         <div class="carousel-caption carousel-caption-inset"><h4>New in 0.11!</h4>
         <ul>
-           <li>PlannerData now uses the Boost Graph Library; each planner can store arbitrary metadata in a graph.
-           <li><a href="http://teamcity.kavrakilab.org/">TeamCity Continuous Integration.</a> You can download up-to-date binary builds of OMPL for a variety of platforms.
+           <li>PlannerData now uses the Boost Graph Library; each planner can store arbitrary metadata in a graph. All this PlannerData can easily be (de)serialized for messaging or storing/loading of planner data.
            <li>Implementation of PRM is now threaded (one thread for growing the roadmap, one thread for monitoring whether the problem is solved).
         </ul>
         <p>See <a href="releaseNotes.html">release notes</a> for details</p>
@@ -98,7 +116,7 @@ href="https://bitbucket.org/ompl/ompl">Bitbucket</a>).
 
 \htmlonly
 </div></div>
-<div class="span12">
+<div class="row"><div class="span12">
 \endhtmlonly
 \section newsevents News & Events
 
@@ -107,7 +125,7 @@ href="https://bitbucket.org/ompl/ompl">Bitbucket</a>).
 - <a href="http://kavrakilab.org/OMPLtutorial">IROS 2011 Tutorial on Motion Planning for Real Robots</a>. This hands-on tutorial describes how to use the ROS and OMPL, but it also gives some background on sampling-based motion planning.
 
 \htmlonly
-</div></div>
+</div></div></div>
 \endhtmlonly
 
 */
