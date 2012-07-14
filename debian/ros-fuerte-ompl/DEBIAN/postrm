@@ -5,3 +5,5 @@ if [ "$1" = "remove" ]; then
 	ldconfig
 fi
 # End automatically added section
+rm /opt/ros/fuerte/include/ompl
+rm /opt/ros/fuerte/include/omplext_odeint
