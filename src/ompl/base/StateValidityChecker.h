@@ -58,6 +58,30 @@ namespace ompl
         /** \class ompl::base::StateValidityCheckerPtr
             \brief A boost shared pointer wrapper for ompl::base::StateValidityChecker */
 
+        /** \brief Properties that a state validity checker may have */
+        struct StateValidityCheckerSpecs
+        {
+            enum ClearanceComputationType
+            {
+                NONE = 0,
+                EXACT,
+                APPROXIMATE,
+                BOUNDED_APPROXIMATE,
+            };
+
+            StateValidityCheckerSpecs(void) : clearanceComputationType(NONE), hasGradientComputation(false)
+            {
+            }
+
+            /** \brief Value indicating the kind of clearance computation this
+                StateValidityChecker can compute (if any). */
+            ClearanceComputationType clearanceComputationType;
+
+            /** \brief Flag indicating that this state validity checker can return
+                a direction that moves a state away from being invalid. */
+            bool hasGradientComputation;
+        };
+
         /** \brief Abstract definition for a class checking the
             validity of states. The implementation of this class must
             be thread safe. */
@@ -116,10 +140,19 @@ namespace ompl
                 return clearance(state);
             }
 
+            /** \brief Return the specifications (capabilities of this state validity checker) */
+            const StateValidityCheckerSpecs& getSpecs(void) const
+            {
+                return specs_;
+            }
+
         protected:
 
             /** \brief The instance of space information this state validity checker operates on */
-            SpaceInformation *si_;
+            SpaceInformation*         si_;
+
+            /** \brief The specifications of the state validity checker (its capabilities) */
+            StateValidityCheckerSpecs specs_;
 
         };
 
