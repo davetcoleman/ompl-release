@@ -1,9 +1,0 @@
-#!/bin/sh
-set -e
-# Automatically added by dh_makeshlibs
-if [ "$1" = "configure" ]; then
-	ldconfig
-fi
-# End automatically added section
-ln -s /opt/ros/fuerte/include/ompl-0.11/ /opt/ros/fuerte/include/ompl
-ln -s /opt/ros/fuerte/include/omplext_odeint-0.11/ /opt/ros/fuerte/include/omplext_odeint
