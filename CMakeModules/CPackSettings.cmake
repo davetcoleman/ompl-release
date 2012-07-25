@@ -50,4 +50,3 @@ if(WIN32)
 endif()
 
 include(CPack)
-
