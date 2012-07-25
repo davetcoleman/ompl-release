@@ -1,6 +1,6 @@
 <stack>
   <name>ompl</name>
-  <version>0.11.0002017</version>
+  <version>0.11.0002031</version>
   <description>OMPL is a free sampling-based motion planning library.</description>
   <author>Kavraki Lab</author>
   <maintainer email="isucan@willowgarage.com">Ioan Sucan</maintainer>
