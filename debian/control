@@ -1,4 +1,4 @@
-Source: ros-groovy-ompl
+Source: ros-fuerte-ompl
 Section: misc
 Priority: extra
 Maintainer: Ioan Sucan <isucan@willowgarage.com>
@@ -6,7 +6,7 @@ Build-Depends: debhelper (>= 7.0.50~), cmake,libboost-all-dev
 Homepage: http://ompl.kavrakilab.org
 Standards-Version: 3.9.2
 
-Package: ros-groovy-ompl
+Package: ros-fuerte-ompl
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libboost-all-dev
 Description: OMPL is a free sampling-based motion planning library.
