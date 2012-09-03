@@ -1,6 +1,6 @@
 <stack>
   <name>ompl</name>
-  <version>0.11.1002045</version>
+  <version>0.11.1002053</version>
   <description>OMPL is a free sampling-based motion planning library.</description>
   <author>Kavraki Lab</author>
   <maintainer email="isucan@willowgarage.com">Ioan Sucan</maintainer>
@@ -8,7 +8,7 @@
   <copyright>Kavraki Lab</copyright>
   <url>http://ompl.kavrakilab.org</url>
 
-  <build_depends>cmake</build_depends>
+  <build_depends>catkin</build_depends>
   <build_depends>boost</build_depends>
 
   <depends>boost</depends>
