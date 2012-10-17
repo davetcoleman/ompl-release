@@ -2,7 +2,7 @@
 <package>
   <name>ompl</name>
   <version>0.11.1002080</version>
-  <description></description>
+  <description>OMPL is a free sampling-based motion planning library.</description>
   <maintainer email="isucan@willowgarage.com">Ioan Sucan</maintainer>
   <license>BSD</license>
 
