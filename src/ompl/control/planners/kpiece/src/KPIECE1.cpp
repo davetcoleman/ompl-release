@@ -54,8 +54,8 @@ ompl::control::KPIECE1::KPIECE1(const SpaceInformationPtr &si) : base::Planner(s
     tree_.grid.onCellUpdate(computeImportance, NULL);
     lastGoalMotion_ = NULL;
 
-    Planner::declareParam<double>("goal_bias", this, &KPIECE1::setGoalBias, &KPIECE1::getGoalBias);
-    Planner::declareParam<double>("border_fraction", this, &KPIECE1::setBorderFraction, &KPIECE1::getBorderFraction);
+    Planner::declareParam<double>("goal_bias", this, &KPIECE1::setGoalBias, &KPIECE1::getGoalBias, "0.:.05:1.");
+    Planner::declareParam<double>("border_fraction", this, &KPIECE1::setBorderFraction, &KPIECE1::getBorderFraction, "0.:0.05:1.");
     Planner::declareParam<unsigned int>("max_close_samples", this, &KPIECE1::setMaxCloseSamplesCount, &KPIECE1::getMaxCloseSamplesCount);
     Planner::declareParam<double>("bad_score_factor", this, &KPIECE1::setBadCellScoreFactor, &KPIECE1::getBadCellScoreFactor);
     Planner::declareParam<double>("good_score_factor", this, &KPIECE1::setGoodCellScoreFactor, &KPIECE1::getGoodCellScoreFactor);
