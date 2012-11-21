@@ -47,8 +47,8 @@ ompl::geometric::LazyRRT::LazyRRT(const base::SpaceInformationPtr &si) : base::P
     maxDistance_ = 0.0;
     lastGoalMotion_ = NULL;
 
-    Planner::declareParam<double>("range", this, &LazyRRT::setRange, &LazyRRT::getRange);
-    Planner::declareParam<double>("goal_bias", this, &LazyRRT::setGoalBias, &LazyRRT::getGoalBias);
+    Planner::declareParam<double>("range", this, &LazyRRT::setRange, &LazyRRT::getRange, "0.:1.:10000.");
+    Planner::declareParam<double>("goal_bias", this, &LazyRRT::setGoalBias, &LazyRRT::getGoalBias, "0.:.05:1.");
 }
 
 ompl::geometric::LazyRRT::~LazyRRT(void)
