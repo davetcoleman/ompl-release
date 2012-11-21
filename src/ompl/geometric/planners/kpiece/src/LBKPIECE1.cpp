@@ -49,8 +49,8 @@ ompl::geometric::LBKPIECE1::LBKPIECE1(const base::SpaceInformationPtr &si) : bas
     maxDistance_ = 0.0;
     connectionPoint_ = std::make_pair<base::State*, base::State*>(NULL, NULL);
 
-    Planner::declareParam<double>("range", this, &LBKPIECE1::setRange, &LBKPIECE1::getRange);
-    Planner::declareParam<double>("border_fraction", this, &LBKPIECE1::setBorderFraction, &LBKPIECE1::getBorderFraction);
+    Planner::declareParam<double>("range", this, &LBKPIECE1::setRange, &LBKPIECE1::getRange, "0.:1.:10000");
+    Planner::declareParam<double>("border_fraction", this, &LBKPIECE1::setBorderFraction, &LBKPIECE1::getBorderFraction, "0.:.05:1.");
     Planner::declareParam<double>("min_valid_path_fraction", this, &LBKPIECE1::setMinValidPathFraction, &LBKPIECE1::getMinValidPathFraction);
 }
 
@@ -110,7 +110,7 @@ ompl::base::PlannerStatus ompl::geometric::LBKPIECE1::solve(const base::PlannerT
     if (!sampler_)
         sampler_ = si_->allocStateSampler();
 
-    OMPL_ERROR("Starting with %d states", (int)(dStart_.getMotionCount() + dGoal_.getMotionCount()));
+    OMPL_INFORM("Starting with %d states", (int)(dStart_.getMotionCount() + dGoal_.getMotionCount()));
 
     base::State *xstate = si_->allocState();
     bool      startTree = true;
