@@ -1,0 +1,40 @@
+From 0890224a81c45908b12cbf4bba46e68195d0f5ea Mon Sep 17 00:00:00 2001
+From: Ioan Sucan <isucan@willowgarage.com>
+Date: Sun, 28 Oct 2012 13:08:45 +0200
+Subject: [PATCH] Added a package.xml file
+
+---
+ package.xml |   21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+ create mode 100644 package.xml
+
+diff --git a/package.xml b/package.xml
+new file mode 100644
+index 0000000..33a3375
+--- /dev/null
++++ b/package.xml
+@@ -0,0 +1,21 @@
++<?xml version="1.0"?>
++<package>
++  <name>ompl</name>
++  <version>0.11.1002124</version>
++  <description>OMPL is a free sampling-based motion planning library.</description>
++  <maintainer email="isucan@willowgarage.com">Ioan Sucan</maintainer>
++  <license>BSD</license>
++
++  <url type="website">http://ompl.kavrakilab.org</url>
++  <url type="bugtracker">https://bitbucket.org/ompl/ompl/issues</url>
++  <url type="repository">https://bitbucket.org/ompl/ompl/</url>
++
++  <author>Kavraki Lab</author>
++
++  <build_depend>cmake</build_depend>
++  <build_depend>boost</build_depend>
++
++  <buildtool_depend>cmake</buildtool_depend>
++
++  <run_depend>boost</run_depend>
++</package>
+-- 
+1.7.9.5
+
