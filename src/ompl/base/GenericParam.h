@@ -107,10 +107,37 @@ namespace ompl
                 return *this;
             }
 
+            /** \brief Set a suggested range */
+            void setRangeSuggestion(const std::string &rangeSuggestion)
+            {
+                rangeSuggestion_ = rangeSuggestion;
+            }
+
+            /** \brief Get the suggested range of values */
+            const std::string& getRangeSuggestion(void) const
+            {
+                return rangeSuggestion_;
+            }
+
         protected:
 
             /** \brief The name of the parameter */
             std::string name_;
+
+            /** \brief Suggested range for the parameter
+
+                This can be used to provide a hint to, e.g., a GUI. The
+                convention used in OMPL is to denote ranges for the
+                following types as follows:
+                - \c bool: "0,1"
+                - \c enum: "<enum_val0>,<enum_val1>,<enum_val2>,..."
+                - \c int, \c double: either "first:last" or "first:stepsize:last".
+                  In the first case, the stepsize is assumed to be 1. It is
+                  important to use floating point representations for double
+                  ranges (i.e., "1." instead of "1") to make sure the type is
+                  deduced correctly.
+            */
+            std::string rangeSuggestion_;
         };
 
 
