@@ -1,7 +1,7 @@
-From 0890224a81c45908b12cbf4bba46e68195d0f5ea Mon Sep 17 00:00:00 2001
+From ddf9c24a7ee3935b254a8825a0fd934cb48b632a Mon Sep 17 00:00:00 2001
 From: Ioan Sucan <isucan@willowgarage.com>
 Date: Sun, 28 Oct 2012 13:08:45 +0200
-Subject: [PATCH] Added a package.xml file
+Subject: [PATCH 1/2] Added a package.xml file
 
 ---
  package.xml |   21 +++++++++++++++++++++
